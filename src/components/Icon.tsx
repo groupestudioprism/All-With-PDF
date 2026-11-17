@@ -63,6 +63,16 @@ const P: Record<string, string> = {
   arrow: 'M5 12h14M13 6l6 6-6 6',
   sun: 'M12 8a4 4 0 1 0 .01 0M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
   moon: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z',
+  unlock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 7.5-2',
+  broom: 'M14 3l7 7-5 2-4-4zM12 8 4 16l1 4 4 1 8-8M7 14l3 3',
+  header: 'M4 4h16v16H4zM4 9h16M8 6.5h4',
+  resize: 'M4 9V4h5M20 15v5h-5M4 4l6 6M20 20l-6-6',
+  book: 'M12 6c-2-1.5-5-2-8-2v14c3 0 6 .5 8 2 2-1.5 5-2 8-2V4c-3 0-6 .5-8 2zM12 6v14',
+  contrast: 'M12 3a9 9 0 1 0 .01 0M12 3v18',
+  word: 'M5 3h9l5 5v13H5zM14 3v5h5M8.5 11.5l1.5 6 2-5 2 5 1.5-6',
+  slides: 'M3 5h18v11H3zM12 16v4M8 20h8M9.5 8.5v4l4-2z',
+  table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14M15 5v14',
+  form: 'M5 3h14v18H5zM8 8h8M8 12h4M8 16h8',
   drag: 'M9 6h.01M9 12h.01M9 18h.01M15 6h.01M15 12h.01M15 18h.01',
 };
 

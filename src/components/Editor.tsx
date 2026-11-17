@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { openPdf, renderPageToCanvas } from '../core/pdfjs';
 import { exportAnnotated, type Ann, type AnnType } from '../core/editorExport';
 import { baseName, downloadBlob, readBytes } from '../core/util';
-import { Dropzone } from './Common';
+import { Dropzone, Spinner } from './Common';
 import { Icon } from './Icon';
 
 type Tool = 'select' | AnnType | 'signature';
@@ -286,24 +286,36 @@ export function Editor({ initial }: { initial: File[] }) {
 
   return (
     <div className="editor">
-      <div className="tbar">
-        {TOOLS.map((t) => <button key={t.id} className={'btn small icon' + (tool === t.id ? ' active' : '')} title={t.label} aria-label={t.label} onClick={() => pick(t.id)}><Icon name={t.icon} size={18} /></button>)}
+      <div className="tbar" role="toolbar" aria-label="Outils d'édition">
+        <div className="tgroup">
+          {TOOLS.slice(0, 2).map((t) => <button key={t.id} className={'btn icon' + (tool === t.id ? ' active' : '')} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onClick={() => pick(t.id)}><Icon name={t.icon} size={19} /></button>)}
+        </div>
         <span className="sep" />
-        <input type="color" title="Couleur" value={selected?.color ?? color} onChange={(e) => (selected && selected.type !== 'image' ? apply({ color: e.target.value }) : setColor(e.target.value))} />
-        <input type="number" title="Taille du texte / épaisseur" min={1} max={120} value={selected?.size ?? size} onChange={(e) => (selected ? apply({ size: Number(e.target.value) }) : setSize(Number(e.target.value)))} />
-        <label><input type="checkbox" checked={selected?.fill ?? fill} onChange={(e) => (selected ? apply({ fill: e.target.checked }) : setFill(e.target.checked))} /> Plein</label>
+        <div className="tgroup">
+          {TOOLS.slice(2, 6).map((t) => <button key={t.id} className={'btn icon' + (tool === t.id ? ' active' : '')} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onClick={() => pick(t.id)}><Icon name={t.icon} size={19} /></button>)}
+        </div>
         <span className="sep" />
-        <button className="btn small" onClick={undo} disabled={!history.current.length}><Icon name="undo" size={15} /> Annuler</button>
-        <button className="btn small danger" onClick={remove} disabled={!sel}><Icon name="trash" size={15} /> Supprimer</button>
+        <div className="tgroup">
+          {TOOLS.slice(6).map((t) => <button key={t.id} className={'btn icon' + (tool === t.id ? ' active' : '')} title={t.label} aria-label={t.label} aria-pressed={tool === t.id} onClick={() => pick(t.id)}><Icon name={t.icon} size={19} /></button>)}
+        </div>
         <span className="sep" />
-        <button className="btn small icon" aria-label="Zoom arrière" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.2).toFixed(2)))}><Icon name="minus" size={15} /></button>
-        <span className="muted" style={{ fontSize: 13 }}>{Math.round(zoom * 100)} %</span>
-        <button className="btn small icon" aria-label="Zoom avant" onClick={() => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(2)))}><Icon name="plus" size={15} /></button>
+        <div className="tpanel">
+          <input type="color" title="Couleur" aria-label="Couleur" value={selected?.color ?? color} onChange={(e) => (selected && selected.type !== 'image' ? apply({ color: e.target.value }) : setColor(e.target.value))} />
+          <input type="number" title="Taille du texte ou épaisseur du trait (pt)" aria-label="Taille" min={1} max={120} value={selected?.size ?? size} onChange={(e) => (selected ? apply({ size: Number(e.target.value) }) : setSize(Number(e.target.value)))} />
+          <label className="switch" style={{ fontSize: 13 }}><input type="checkbox" checked={selected?.fill ?? fill} onChange={(e) => (selected ? apply({ fill: e.target.checked }) : setFill(e.target.checked))} /><span className="track" />Plein</label>
+        </div>
+        <span className="sep" />
+        <button className="btn icon" title="Annuler (Ctrl+Z)" aria-label="Annuler" onClick={undo} disabled={!history.current.length}><Icon name="undo" size={18} /></button>
+        <button className="btn icon" title="Supprimer la sélection" aria-label="Supprimer" onClick={remove} disabled={!sel}><Icon name="trash" size={18} /></button>
+        <span className="sep" />
+        <button className="btn icon" aria-label="Zoom arrière" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.2).toFixed(2)))}><Icon name="minus" size={17} /></button>
+        <span className="zoomval">{Math.round(zoom * 100)} %</span>
+        <button className="btn icon" aria-label="Zoom avant" onClick={() => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(2)))}><Icon name="plus" size={17} /></button>
         <span className="grow" />
         <button className="btn small" onClick={() => setFile(null)}>Changer de fichier</button>
-        <button className="btn primary" style={{ padding: '7px 16px', fontSize: 14 }} onClick={save} disabled={busy || !bytes}>{busy ? 'Export en cours' : 'Enregistrer le PDF'}</button>
+        <button className="btn primary" style={{ padding: '8px 16px', fontSize: 14 }} onClick={save} disabled={busy || !bytes}>{busy ? <Spinner /> : <Icon name="download" size={16} />}{busy ? 'Export en cours' : 'Enregistrer'}</button>
       </div>
-      {error && <div className="err"><Icon name="alert" />{error}</div>}
+      {error && <div className="err" role="alert"><Icon name="alert" /><div>{error}</div></div>}
       {redacts > 0 && <div className="note">{redacts} zone(s) de caviardage : à l'export, les pages concernées sont rasterisées pour supprimer réellement le texte caché.</div>}
       <div className="pages">
         {!pdf && <div className="muted">Chargement du document</div>}

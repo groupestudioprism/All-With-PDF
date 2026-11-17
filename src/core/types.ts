@@ -16,6 +16,7 @@ export type OptionDef = { key: string; label: string; help?: string } & (
   | { type: 'select'; default: string; choices: { value: string; label: string }[] }
   | { type: 'checkbox'; default: boolean }
   | { type: 'color'; default: string }
+  | { type: 'password'; default: string; placeholder?: string }
 );
 
 export interface ToolOutput {
@@ -36,7 +37,7 @@ export interface Tool {
   category: CategoryId;
   description: string;
   /** Type de fichiers acceptés */
-  accept: 'pdf' | 'image';
+  accept: 'pdf' | 'image' | 'text' | 'word';
   /** Plusieurs fichiers en entrée traités ensemble (fusion…) ; sinon chaque fichier est traité séparément */
   multiple: boolean;
   /** Nombre exact de fichiers (comparaison) */
@@ -45,7 +46,7 @@ export interface Tool {
   /** Sortie = PDF(s), peut être chaîné dans un workflow */
   outputsPdf: boolean;
   /** Interface dédiée au lieu du formulaire générique */
-  custom?: 'organize' | 'editor';
+  custom?: 'organize' | 'editor' | 'forms';
   /** Nécessite le navigateur (canvas / pdf.js) */
   needsBrowser?: boolean;
   run: (files: File[], opts: Options, progress: Progress) => Promise<ToolOutput[]>;

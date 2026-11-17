@@ -114,5 +114,52 @@ await test('registre : ids uniques, options valides', async () => {
   for (const t of TOOLS) for (const d of t.options) assert.ok(d.key && d.label, `${t.id}`);
 });
 
+await test('protéger puis déverrouiller (AES-256)', async () => {
+  const [enc] = await run('protect', [A], { user: 'secret', owner: 'boss', print: 'none', copy: false });
+  await assert.rejects(PDFDocument.load(enc.data as Uint8Array), /encrypted/i);
+  await assert.rejects(run('unlock', [new File([enc.data as BlobPart], 'e.pdf')], { password: 'faux' }), /incorrect/i);
+  const [dec] = await run('unlock', [new File([enc.data as BlobPart], 'e.pdf')], { password: 'secret' });
+  assert.equal(await pages(dec), 5);
+  await assert.rejects(run('protect', [A], {}), /mot de passe/i);
+});
+await test('nettoyer / en-tête et pied / format', async () => {
+  assert.equal(await pages((await run('clean', [A]))[0]), 5);
+  assert.equal(await pages((await run('header-footer', [A], { hc: 'Titre', fl: '{fichier}' }))[0]), 5);
+  const [r] = await run('resize', [A], { format: 'a5', margin: 5 });
+  const d = await PDFDocument.load(r.data as Uint8Array);
+  assert.ok(Math.abs(d.getPage(0).getSize().width - 419.53) < 1);
+});
+await test('réordonner / brochure / diviser par taille', async () => {
+  assert.equal(await pages((await run('page-order', [A], { mode: 'reverse' }))[0]), 5);
+  assert.equal(await pages((await run('page-order', [A], { mode: 'odd' }))[0]), 3);
+  assert.equal(await pages((await run('page-order', [A], { mode: 'even' }))[0]), 2);
+  assert.equal(await pages((await run('page-order', [A], { mode: 'repeat', n: 2 }))[0]), 10);
+  assert.equal(await pages((await run('page-order', [A], { mode: 'blank', n: 2 }))[0]), 7);
+  assert.equal(await pages((await run('booklet', [A]))[0]), 4);
+  const parts = await run('split-size', [A], { mb: 0.2 });
+  assert.ok(parts.length >= 1);
+});
+await test('texte vers PDF (txt et markdown)', async () => {
+  const long = Array.from({ length: 200 }, (_, i) => `Ligne ${i} avec des accents éèà et un texte assez long pour tester le retour à la ligne automatique du paragraphe.`).join('\n');
+  const [o] = await run('text-to-pdf', [new File([long], 'a.txt', { type: 'text/plain' })]);
+  assert.ok((await pages(o)) >= 4);
+  const [m] = await run('text-to-pdf', [new File(['# Titre\n\n- un\n- deux\n\nTexte **gras**'], 'a.md')]);
+  assert.equal(await pages(m), 1);
+});
+await test('PDF vers Word / tableur, infos, recherche', async () => {
+  const [w] = await run('pdf-to-word', [A], { pages: '1-2' });
+  const JSZip = (await import('jszip')).default;
+  const z = await JSZip.loadAsync(w.data as Uint8Array);
+  const body = await z.file('word/document.xml')!.async('string');
+  assert.match(body, /A page 1/); assert.match(body, /w:br w:type="page"/);
+  const [csv] = await run('pdf-to-csv', [A], { minCols: 1 });
+  assert.match(new TextDecoder().decode(csv.data as Uint8Array), /A page 1/);
+  const [inf] = await run('info', [A]);
+  assert.match(new TextDecoder().decode(inf.data as Uint8Array), /A4|141 x 212|mm/);
+  const [s] = await run('search', [A], { term: 'dupont' });
+  assert.match(s.note!, /5 occurrence/);
+  await assert.rejects(run('search', [A], { term: '' }));
+});
+
 console.log(failed ? `\n${failed} test(s) en échec` : '\nTous les tests passent');
 process.exit(failed ? 1 : 0);

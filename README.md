@@ -4,28 +4,27 @@ Tous les outils d'iLovePDF, **sans limites** : taille et nombre de fichiers illi
 
 React + TypeScript + Vite · [pdf-lib](https://pdf-lib.js.org/) · [pdf.js](https://mozilla.github.io/pdf.js/) · [tesseract.js](https://tesseract.projectnaptha.com/) · JSZip
 
-## Outils disponibles (23 + workflows)
+## Outils disponibles (40 + workflows)
 
 | Catégorie | Outils |
 |---|---|
-| Organiser | Fusionner, Diviser (plages / tous les N / par page), Supprimer des pages, Extraire des pages, **Organiser** (vignettes glisser-déposer, multi-PDF), Scanner → PDF, Pages par feuille |
-| Optimiser | Compresser (recompression des images JPEG en conservant le texte, ou rasterisation), Réparer (fichiers tronqués), OCR (multilingue) |
-| Vers PDF | Image → PDF (JPG, PNG, WebP, GIF, BMP…) |
-| Depuis PDF | PDF → Image (JPG / PNG / WebP jusqu'à 600 dpi), PDF → Texte |
-| Modifier | **Éditeur visuel** (texte, formes, surlignage, dessin, images, **signature manuscrite**, blanc de correction, **caviardage définitif**), Pivoter, Numéroter, Filigrane (centré ou mosaïque), Rogner (manuel ou auto), Aplatir les formulaires |
-| Sécurité | **Caviarder** par recherche (mots, regex, e-mails, téléphones, IBAN, cartes) avec suppression réelle du texte, Métadonnées (anonymiser) |
-| Analyse | PDF → Markdown structuré, **Comparer** deux PDF (rapport HTML) |
-| ⛓️ **Workflows** | Chaînez n'importe quels outils (ex. fusionner → numéroter → compresser), modèles fournis, enregistrement local, rejouable sur des lots |
+| Organiser | Fusionner, Diviser (plages, tous les N, par page, **par taille**), Supprimer / Extraire des pages, **Organiser** par vignettes (multi-PDF), **Réordonner en lot** (inverser, paires/impaires, répéter, pages vierges), Pages par feuille, **Brochure** (imposition recto verso), Scanner vers PDF |
+| Optimiser | Compresser (images JPEG recompressées en gardant le texte, ou rasterisation), **Noir et blanc**, Réparer (fichiers tronqués), OCR multilingue |
+| Vers PDF | Image vers PDF, **Word vers PDF**, **Texte / Markdown vers PDF** |
+| Depuis PDF | PDF vers image (jusqu'à 600 dpi), PDF vers texte, **PDF vers Word (.docx)**, **PDF vers PowerPoint (.pptx)**, **PDF vers tableur (CSV)** |
+| Modifier | **Éditeur visuel** (texte, formes, surlignage, dessin, images, **signature**, blanc de correction, caviardage définitif), **Remplir un formulaire**, Pivoter, Numéroter, **En-tête et pied de page**, Filigrane, Rogner (manuel ou auto), **Changer le format**, Aplatir les formulaires |
+| Sécurité | **Protéger par mot de passe (AES 256)**, **Déverrouiller**, **Caviarder** par recherche (mots, regex, e-mails, téléphones, IBAN, cartes), **Nettoyer** (annotations, JavaScript, pièces jointes), Métadonnées |
+| Analyse | PDF vers Markdown, **Comparer** deux PDF, **Rechercher dans le PDF**, **Informations du PDF** |
+| Workflows | Chaînez n'importe quels outils, modèles fournis, enregistrement local, rejouable sur des lots |
 
-« Continuer avec un autre outil… » est proposé après chaque résultat PDF.
+Affichage clair ou sombre, outils récemment utilisés, raccourci `/` pour la recherche.
 
-## Pas encore implémenté (prochaines étapes)
+## Limites connues
 
-- Word / Excel / PowerPoint / HTML ↔ PDF (nécessite un moteur type LibreOffice en WASM ou un backend)
-- Protéger / déverrouiller par mot de passe (chiffrement : qpdf en WASM)
-- Remplissage visuel des formulaires AcroForm, PDF/A
-- Traduction et résumé IA (modèles locaux WebGPU ou API au choix de l'utilisateur)
-- L'OCR télécharge les données de langue (CDN) à la première utilisation
+- PDF vers Word et PDF vers PowerPoint : le texte et les titres sont repris, pas la mise en page exacte (PowerPoint : diapositives en images, texte dans les notes). Word vers PDF : mise en forme simplifiée, sans images.
+- Excel / PowerPoint / HTML vers PDF : nécessitent un moteur de rendu complet (LibreOffice en WASM ou serveur), non inclus.
+- Traduction et résumé IA : non inclus.
+- L'OCR télécharge les données de langue (CDN) à la première utilisation.
 
 ## Développement
 

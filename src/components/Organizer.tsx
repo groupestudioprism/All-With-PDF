@@ -3,7 +3,7 @@ import { PDFDocument, degrees } from 'pdf-lib';
 import { canvasToBlob, openPdf, renderPageToCanvas } from '../core/pdfjs';
 import { downloadBlob, readBytes } from '../core/util';
 import { loadPdf } from '../tools/organize';
-import { Dropzone } from './Common';
+import { Dropzone, Spinner } from './Common';
 import { Icon } from './Icon';
 
 interface Item { id: string; src: number; idx: number; rot: number; blank?: boolean; }
@@ -74,10 +74,10 @@ export function Organizer({ initial }: { initial: File[] }) {
   return (
     <div>
       {!items.length && !files.length && <Dropzone accept="pdf" multiple onFiles={addFiles} />}
-      {error && <div className="err"><Icon name="alert" />{error}</div>}
+      {error && <div className="err" role="alert"><Icon name="alert" /><div>{error}</div></div>}
       {files.length > 0 && (
         <>
-          <div className="row">
+          <div className="otb">
             <b>{items.length} page(s)</b>
             <span className="muted">Glissez les vignettes pour réordonner.</span>
             <span className="grow" />
@@ -86,7 +86,7 @@ export function Organizer({ initial }: { initial: File[] }) {
             <button className="btn small" onClick={() => setItems((c) => c.map((i) => ({ ...i, rot: (i.rot + 90) % 360 })))}><Icon name="rotr" size={15} /> Tout pivoter</button>
             <button className="btn small" onClick={() => setItems((c) => [...c].reverse())}><Icon name="reverse" size={15} /> Inverser</button>
             <button className="btn small danger" onClick={() => { setItems([]); setFiles([]); setThumbs({}); loaded.current = 0; }}>Tout effacer</button>
-            <button className="btn primary" style={{ padding: '8px 18px', fontSize: 15 }} disabled={busy || !items.length} onClick={save}><Icon name="download" size={16} /> {busy ? 'Export en cours' : 'Enregistrer'}</button>
+            <button className="btn primary" style={{ padding: '8px 16px', fontSize: 14 }} disabled={busy || !items.length} onClick={save}>{busy ? <Spinner /> : <Icon name="download" size={16} />} {busy ? 'Export en cours' : 'Enregistrer'}</button>
           </div>
           <div className="thumbs">
             {items.map((it, k) => (
@@ -96,7 +96,7 @@ export function Organizer({ initial }: { initial: File[] }) {
                 {it.blank ? <div className="ph">Page vierge</div>
                   : thumbs[`${it.src}-${it.idx}`] ? <img src={thumbs[`${it.src}-${it.idx}`]} draggable={false} style={{ maxWidth: '100%', maxHeight: 170, background: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,.2)', transform: `rotate(${it.rot}deg)`, transition: 'transform .2s' }} />
                   : <div className="ph">…</div>}
-                <small>{k + 1}{!it.blank && files.length > 1 ? ` · ${files[it.src]?.name}` : ''}</small>
+                <span className="badge">{k + 1}</span>{!it.blank && files.length > 1 && <small>{files[it.src]?.name}</small>}
                 <div className="tb">
                   <button title="Pivoter à gauche" aria-label="Pivoter à gauche" onClick={() => upd(it.id, (i) => ({ ...i, rot: (i.rot + 270) % 360 }))}><Icon name="rotl" size={16} /></button>
                   <button title="Pivoter à droite" aria-label="Pivoter à droite" onClick={() => upd(it.id, (i) => ({ ...i, rot: (i.rot + 90) % 360 }))}><Icon name="rotr" size={16} /></button>

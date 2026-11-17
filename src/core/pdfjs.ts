@@ -56,6 +56,34 @@ export interface TextLine {
   x: number;
 }
 
+export interface TextCell { text: string; x: number }
+/** Lignes découpées en cellules (colonnes) d'après les écarts horizontaux : base de l'extraction de tableaux. */
+export async function pageRows(page: any): Promise<{ y: number; cells: TextCell[] }[]> {
+  const content = await page.getTextContent();
+  const rows: { y: number; items: { x: number; str: string; size: number; w: number }[] }[] = [];
+  for (const it of content.items as any[]) {
+    if (!('str' in it) || !it.str.trim()) continue;
+    const [, , , d, x, y] = it.transform as number[];
+    const size = Math.abs(d) || 10;
+    let row = rows.find((r) => Math.abs(r.y - y) < size * 0.4);
+    if (!row) rows.push((row = { y, items: [] }));
+    row.items.push({ x, str: it.str, size, w: it.width ?? 0 });
+  }
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map((r) => {
+    r.items.sort((a, b) => a.x - b.x);
+    const cells: TextCell[] = [];
+    let prevEnd = -Infinity;
+    for (const i of r.items) {
+      const last = cells[cells.length - 1];
+      if (last && i.x - prevEnd < Math.max(6, i.size * 0.9)) last.text += (i.x - prevEnd > i.size * 0.15 ? ' ' : '') + i.str;
+      else cells.push({ text: i.str, x: i.x });
+      prevEnd = i.x + i.w;
+    }
+    return { y: r.y, cells };
+  });
+}
+
 /** Regroupe les fragments de texte d'une page en lignes (ordre de lecture). */
 export async function pageLines(page: any): Promise<TextLine[]> {
   const content = await page.getTextContent();
