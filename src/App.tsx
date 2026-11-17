@@ -4,6 +4,7 @@ import { TOOLS, toolById } from './tools';
 import { ToolPage } from './components/ToolPage';
 import { Workflows } from './components/Workflows';
 import { Icon } from './components/Icon';
+import { LogoMark } from './components/Logo';
 
 function useHash() {
   const [h, setH] = useState(location.hash);
@@ -54,7 +55,20 @@ function Home() {
   );
 }
 
+function useTheme() {
+  const system = () => (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (document.documentElement.dataset.theme as 'light' | 'dark') || system());
+  const toggle = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('awp.theme', next); } catch { /* stockage indisponible */ }
+    setTheme(next);
+  };
+  return { theme, toggle };
+}
+
 export default function App() {
+  const { theme, toggle } = useTheme();
   const hash = useHash();
   const m = hash.match(/^#\/tool\/([\w-]+)/);
   const tool = m ? toolById(m[1]) : undefined;
@@ -62,8 +76,8 @@ export default function App() {
   return (
     <>
       <header className="top">
-        <a className="logo" href="#/"><span className="mark">PDF</span><span>All With PDF</span></a>
-        <nav><a href="#/">Outils</a><a href="#/workflows">Workflows</a></nav>
+        <a className="logo" href="#/"><LogoMark size={32} /><span className="word">All With <b>PDF</b></span></a>
+        <nav><a href="#/">Outils</a><a href="#/workflows">Workflows</a><button className="themebtn" onClick={toggle} aria-label={theme === 'dark' ? 'Passer en affichage clair' : 'Passer en affichage sombre'} title={theme === 'dark' ? 'Affichage clair' : 'Affichage sombre'}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} /></button></nav>
       </header>
       <main>
         {!home && <a className="crumb" href="#/"><Icon name="arrow" size={15} style={{ transform: 'rotate(180deg)' }} /> Tous les outils</a>}
