@@ -59,7 +59,7 @@ async function recompressImages(doc: PDFDocument, quality: number, scale: number
 export const compress: Tool = {
   id: 'compress',
   name: 'Compresser PDF',
-  icon: '🗜️',
+  icon: 'compress',
   category: 'optimize',
   description: 'Réduisez le poids : recompression des images (texte conservé) ou rasterisation totale pour un gain maximal.',
   accept: 'pdf',
@@ -108,7 +108,7 @@ export const compress: Tool = {
       return [{ name: f.name, data: bytes, mime: PDF_MIME, note: 'Le fichier est déjà optimisé : l\'original est conservé.' }];
     }
     const pct = Math.round((1 - out.byteLength / bytes.byteLength) * 100);
-    return [{ name: `${baseName(f.name)}_compresse.pdf`, data: out, mime: PDF_MIME, note: `${formatBytes(bytes.byteLength)} → ${formatBytes(out.byteLength)} (−${pct} %). ${note}` }];
+    return [{ name: `${baseName(f.name)}_compresse.pdf`, data: out, mime: PDF_MIME, note: `de ${formatBytes(bytes.byteLength)} à ${formatBytes(out.byteLength)} (${pct} % de moins). ${note}` }];
   },
 };
 
@@ -134,7 +134,7 @@ async function tolerantLoad(bytes: Uint8Array): Promise<{ doc: PDFDocument; cut:
 export const repair: Tool = {
   id: 'repair',
   name: 'Réparer PDF',
-  icon: '🩹',
+  icon: 'repair',
   category: 'optimize',
   description: 'Reconstruit un PDF endommagé ou tronqué en récupérant toutes les pages lisibles.',
   accept: 'pdf',
@@ -160,7 +160,7 @@ export const repair: Tool = {
         return [{ name: `${baseName(f.name)}_repare.pdf`, data: await out.save({ useObjectStreams: true }), mime: PDF_MIME, note: `${ok}/${src.getPageCount()} page(s) récupérée(s)${cut ? ' (fin de fichier tronquée reconstruite)' : ''}.` }];
       }
     }
-    // Dernier recours : pdf.js (très tolérant) → pages reconstruites en images
+    // Dernier recours : pdf.js (très tolérant), pages reconstruites en images
     try {
       const pdf = await openPdf(bytes);
       const out = await PDFDocument.create();
@@ -181,7 +181,7 @@ export const repair: Tool = {
 export const ocr: Tool = {
   id: 'ocr',
   name: 'OCR PDF',
-  icon: '🔎',
+  icon: 'ocr',
   category: 'optimize',
   description: 'Rend un PDF scanné recherchable et copiable (reconnaissance de texte locale, multilingue).',
   accept: 'pdf',

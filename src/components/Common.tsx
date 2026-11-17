@@ -3,6 +3,7 @@ import type { OptionDef, Options, Progress, Tool, ToolOutput } from '../core/typ
 import { downloadBlob, formatBytes, outputToFile, sizeOf, toBlob, zipOutputs } from '../core/util';
 import { setHandoff } from '../core/store';
 import { TOOLS } from '../tools';
+import { Icon } from './Icon';
 
 export function Dropzone({ accept, multiple, onFiles, label }: { accept: 'pdf' | 'image'; multiple: boolean; onFiles: (f: File[]) => void; label?: string }) {
   const input = useRef<HTMLInputElement>(null);
@@ -17,8 +18,9 @@ export function Dropzone({ accept, multiple, onFiles, label }: { accept: 'pdf' |
       onDragLeave={() => setOver(false)}
       onDrop={(e) => { e.preventDefault(); setOver(false); const f = filter(e.dataTransfer.files); if (f.length) onFiles(multiple ? f : f.slice(0, 1)); }}
     >
+      <span className="tile"><Icon name="upload" size={22} /></span>
       <b>{label ?? (accept === 'pdf' ? 'Déposez vos PDF ici' : 'Déposez vos images ici')}</b>
-      <small>ou cliquez pour parcourir — aucun envoi : tout reste sur votre appareil</small>
+      <small>ou cliquez pour les choisir sur votre ordinateur. Rien n'est envoyé sur Internet.</small>
       <input ref={input} hidden type="file" multiple={multiple} accept={accept === 'pdf' ? 'application/pdf,.pdf' : 'image/*'} onChange={(e) => { const f = filter(e.target.files ?? []); if (f.length) onFiles(multiple ? f : f.slice(0, 1)); e.target.value = ''; }} />
     </div>
   );
@@ -30,11 +32,11 @@ export function FileList({ files, onChange, reorder }: { files: File[]; onChange
     <div className="files">
       {files.map((f, i) => (
         <div className="file" key={f.name + i + f.size}>
-          <span>{f.type.startsWith('image/') ? '🖼️' : '📄'}</span>
+          <Icon name={f.type.startsWith('image/') ? 'image' : 'file'} />
           <span className="n">{f.name}</span>
           <small>{formatBytes(f.size)}</small>
-          {reorder && files.length > 1 && (<><button className="btn small" onClick={() => move(i, -1)} disabled={i === 0}>↑</button><button className="btn small" onClick={() => move(i, 1)} disabled={i === files.length - 1}>↓</button></>)}
-          <button className="btn small danger" onClick={() => onChange(files.filter((_, k) => k !== i))}>✕</button>
+          {reorder && files.length > 1 && (<><button className="btn small icon" aria-label="Monter" onClick={() => move(i, -1)} disabled={i === 0}><Icon name="up" size={15} /></button><button className="btn small icon" aria-label="Descendre" onClick={() => move(i, 1)} disabled={i === files.length - 1}><Icon name="down" size={15} /></button></>)}
+          <button className="btn small icon danger" aria-label="Retirer" onClick={() => onChange(files.filter((_, k) => k !== i))}><Icon name="close" size={15} /></button>
         </div>
       ))}
     </div>
@@ -114,25 +116,25 @@ export function Results({ outputs, canChain = true }: { outputs: ToolOutput[]; c
   const preview = () => html && window.open(URL.createObjectURL(toBlob(html)), '_blank');
   return (
     <div className="ok-box">
-      <div className="row"><b>✅ Terminé — {outputs.length} fichier{outputs.length > 1 ? 's' : ''} ({formatBytes(total)})</b></div>
+      <div className="head"><Icon name="check" /> Terminé : {outputs.length} fichier{outputs.length > 1 ? 's' : ''} ({formatBytes(total)})</div>
       {outputs.map((o, i) => o.note && <div key={i} className="note">{o.name} : {o.note}</div>)}
       <div className="files">
         {outputs.map((o, i) => (
           <div className="file" key={i}><span className="n">{o.name}</span><small>{formatBytes(sizeOf(o))}</small>
-            <button className="btn small" onClick={() => downloadBlob(toBlob(o), o.name)}>Télécharger</button></div>
+            <button className="btn small" onClick={() => downloadBlob(toBlob(o), o.name)}><Icon name="download" size={15} /> Télécharger</button></div>
         ))}
       </div>
       <div className="row">
-        {outputs.length === 1 && <button className="btn primary" onClick={() => downloadBlob(toBlob(outputs[0]), outputs[0].name)}>⬇ Télécharger</button>}
-        {outputs.length > 1 && <button className="btn primary" onClick={async () => downloadBlob(await zipOutputs(outputs), 'resultat.zip')}>⬇ Tout télécharger (.zip)</button>}
-        {html && <button className="btn" onClick={preview}>👁 Ouvrir le rapport</button>}
+        {outputs.length === 1 && <button className="btn primary" onClick={() => downloadBlob(toBlob(outputs[0]), outputs[0].name)}><Icon name="download" /> Télécharger</button>}
+        {outputs.length > 1 && <button className="btn primary" onClick={async () => downloadBlob(await zipOutputs(outputs), 'resultat.zip')}><Icon name="download" /> Tout télécharger (.zip)</button>}
+        {html && <button className="btn" onClick={preview}><Icon name="file" /> Ouvrir le rapport</button>}
         {canChain && allPdf && (
           <>
             <select className="btn" value={chainTo} onChange={(e) => setChainTo(e.target.value)}>
-              <option value="">Continuer avec un autre outil…</option>
-              {TOOLS.filter((t) => t.accept === 'pdf').map((t) => <option key={t.id} value={t.id}>{t.icon} {t.name}</option>)}
+              <option value="">Continuer avec un autre outil</option>
+              {TOOLS.filter((t) => t.accept === 'pdf').map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-            {chainTo && <button className="btn" onClick={() => { setHandoff(outputs.map(outputToFile)); location.hash = `#/tool/${chainTo}`; }}>Go →</button>}
+            {chainTo && <button className="btn" onClick={() => { setHandoff(outputs.map(outputToFile)); location.hash = `#/tool/${chainTo}`; }}>Ouvrir</button>}
           </>
         )}
       </div>

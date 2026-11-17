@@ -22,7 +22,7 @@ const pdfOut = (name: string, data: Uint8Array) => ({ name, data, mime: PDF_MIME
 export const merge: Tool = {
   id: 'merge',
   name: 'Fusionner PDF',
-  icon: '🧩',
+  icon: 'merge',
   category: 'organize',
   description: 'Combinez autant de PDF que vous voulez, dans l\'ordre de votre choix.',
   accept: 'pdf',
@@ -33,7 +33,7 @@ export const merge: Tool = {
       key: 'sort', label: 'Ordre', type: 'select', default: 'manual',
       choices: [
         { value: 'manual', label: 'Ordre de la liste (glisser pour réordonner)' },
-        { value: 'name', label: 'Nom de fichier (A → Z, naturel)' },
+        { value: 'name', label: 'Nom de fichier (A à Z, ordre naturel)' },
         { value: 'date', label: 'Date de modification' },
       ],
     },
@@ -56,7 +56,7 @@ export const merge: Tool = {
 export const split: Tool = {
   id: 'split',
   name: 'Diviser PDF',
-  icon: '✂️',
+  icon: 'split',
   category: 'organize',
   description: 'Découpez par plages, tous les N pages ou page par page.',
   accept: 'pdf',
@@ -99,7 +99,7 @@ export const split: Tool = {
 export const removePages: Tool = {
   id: 'remove-pages',
   name: 'Supprimer des pages',
-  icon: '🗑️',
+  icon: 'trash',
   category: 'organize',
   description: 'Retirez les pages dont vous n\'avez pas besoin.',
   accept: 'pdf',
@@ -120,7 +120,7 @@ export const removePages: Tool = {
 export const extractPages: Tool = {
   id: 'extract-pages',
   name: 'Extraire des pages',
-  icon: '📤',
+  icon: 'extract',
   category: 'organize',
   description: 'Gardez uniquement certaines pages (dans l\'ordre saisi, doublons permis).',
   accept: 'pdf',
@@ -138,7 +138,7 @@ export const extractPages: Tool = {
 export const organize: Tool = {
   id: 'organize',
   name: 'Organiser PDF',
-  icon: '🗂️',
+  icon: 'organize',
   category: 'organize',
   description: 'Vignettes : réordonnez, pivotez, dupliquez, supprimez, insérez des pages vierges, même entre plusieurs PDF.',
   accept: 'pdf',

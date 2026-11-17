@@ -3,19 +3,20 @@ import { openPdf, renderPageToCanvas } from '../core/pdfjs';
 import { exportAnnotated, type Ann, type AnnType } from '../core/editorExport';
 import { baseName, downloadBlob, readBytes } from '../core/util';
 import { Dropzone } from './Common';
+import { Icon } from './Icon';
 
 type Tool = 'select' | AnnType | 'signature';
 const TOOLS: { id: Tool; label: string; icon: string }[] = [
-  { id: 'select', label: 'Sélection', icon: '🖱️' },
-  { id: 'text', label: 'Texte', icon: '🅣' },
-  { id: 'rect', label: 'Rectangle', icon: '▭' },
-  { id: 'ellipse', label: 'Ellipse', icon: '◯' },
-  { id: 'highlight', label: 'Surligner', icon: '🖍️' },
-  { id: 'draw', label: 'Dessin', icon: '✍️' },
-  { id: 'whiteout', label: 'Blanc de correction', icon: '⬜' },
-  { id: 'redact', label: 'Caviarder (définitif)', icon: '⬛' },
-  { id: 'signature', label: 'Signature', icon: '🖊️' },
-  { id: 'image', label: 'Image', icon: '🖼️' },
+  { id: 'select', label: 'Sélection', icon: 'cursor' },
+  { id: 'text', label: 'Texte', icon: 'type' },
+  { id: 'rect', label: 'Rectangle', icon: 'square' },
+  { id: 'ellipse', label: 'Ellipse', icon: 'circle' },
+  { id: 'highlight', label: 'Surligner', icon: 'highlight' },
+  { id: 'draw', label: 'Dessin', icon: 'pen' },
+  { id: 'whiteout', label: 'Blanc de correction', icon: 'eraser' },
+  { id: 'redact', label: 'Caviarder (définitif)', icon: 'redact' },
+  { id: 'signature', label: 'Signature', icon: 'signature' },
+  { id: 'image', label: 'Image', icon: 'image' },
 ];
 let uid = 0;
 const nid = () => `a${Date.now().toString(36)}${uid++}`;
@@ -141,7 +142,7 @@ function PageView(props: {
     return (
       <div key={a.id} className={'ann' + (sel ? ' sel' : '')} style={style} onPointerDown={(e) => startDrag(e, a, 'move')}>
         {inner}
-        {sel && a.type === 'text' && <div style={{ position: 'absolute', left: -2, top: -18, fontSize: 12, cursor: 'move', background: 'var(--brand)', color: '#fff', borderRadius: 4, padding: '0 5px' }} onPointerDown={(e) => startDrag(e, a, 'move')}>✥</div>}
+        {sel && a.type === 'text' && <div className="grip" onPointerDown={(e) => startDrag(e, a, 'move')}><Icon name="drag" size={14} /></div>}
         {sel && <div className="h" onPointerDown={(e) => startDrag(e, a, 'resize')} />}
       </div>
     );
@@ -286,26 +287,26 @@ export function Editor({ initial }: { initial: File[] }) {
   return (
     <div className="editor">
       <div className="tbar">
-        {TOOLS.map((t) => <button key={t.id} className={'btn small' + (tool === t.id ? ' active' : '')} title={t.label} onClick={() => pick(t.id)}>{t.icon} <span>{t.label}</span></button>)}
+        {TOOLS.map((t) => <button key={t.id} className={'btn small icon' + (tool === t.id ? ' active' : '')} title={t.label} aria-label={t.label} onClick={() => pick(t.id)}><Icon name={t.icon} size={18} /></button>)}
         <span className="sep" />
         <input type="color" title="Couleur" value={selected?.color ?? color} onChange={(e) => (selected && selected.type !== 'image' ? apply({ color: e.target.value }) : setColor(e.target.value))} />
         <input type="number" title="Taille du texte / épaisseur" min={1} max={120} value={selected?.size ?? size} onChange={(e) => (selected ? apply({ size: Number(e.target.value) }) : setSize(Number(e.target.value)))} />
-        <label className="muted" style={{ fontSize: 13 }}><input type="checkbox" checked={selected?.fill ?? fill} onChange={(e) => (selected ? apply({ fill: e.target.checked }) : setFill(e.target.checked))} /> plein</label>
+        <label><input type="checkbox" checked={selected?.fill ?? fill} onChange={(e) => (selected ? apply({ fill: e.target.checked }) : setFill(e.target.checked))} /> Plein</label>
         <span className="sep" />
-        <button className="btn small" onClick={undo} disabled={!history.current.length}>↶ Annuler</button>
-        <button className="btn small danger" onClick={remove} disabled={!sel}>Supprimer</button>
+        <button className="btn small" onClick={undo} disabled={!history.current.length}><Icon name="undo" size={15} /> Annuler</button>
+        <button className="btn small danger" onClick={remove} disabled={!sel}><Icon name="trash" size={15} /> Supprimer</button>
         <span className="sep" />
-        <button className="btn small" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.2).toFixed(2)))}>−</button>
+        <button className="btn small icon" aria-label="Zoom arrière" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.2).toFixed(2)))}><Icon name="minus" size={15} /></button>
         <span className="muted" style={{ fontSize: 13 }}>{Math.round(zoom * 100)} %</span>
-        <button className="btn small" onClick={() => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(2)))}>+</button>
+        <button className="btn small icon" aria-label="Zoom avant" onClick={() => setZoom((z) => Math.min(3, +(z + 0.2).toFixed(2)))}><Icon name="plus" size={15} /></button>
         <span className="grow" />
         <button className="btn small" onClick={() => setFile(null)}>Changer de fichier</button>
-        <button className="btn primary" style={{ padding: '7px 16px', fontSize: 14 }} onClick={save} disabled={busy || !bytes}>{busy ? 'Export…' : '⬇ Enregistrer le PDF'}</button>
+        <button className="btn primary" style={{ padding: '7px 16px', fontSize: 14 }} onClick={save} disabled={busy || !bytes}>{busy ? 'Export en cours' : 'Enregistrer le PDF'}</button>
       </div>
-      {error && <div className="err">{error}</div>}
-      {redacts > 0 && <div className="note">⬛ {redacts} zone(s) de caviardage : à l'export, les pages concernées sont rasterisées pour supprimer réellement le texte caché.</div>}
+      {error && <div className="err"><Icon name="alert" />{error}</div>}
+      {redacts > 0 && <div className="note">{redacts} zone(s) de caviardage : à l'export, les pages concernées sont rasterisées pour supprimer réellement le texte caché.</div>}
       <div className="pages">
-        {!pdf && <div className="muted">Chargement…</div>}
+        {!pdf && <div className="muted">Chargement du document</div>}
         {pdf && infos.map((info, i) => (
           <PageView key={i} pdf={pdf} num={i} info={info} zoom={zoom} anns={grouped[i]} tool={tool} selected={sel} color={color} size={size} fill={fill}
             onSelect={setSel} onActive={setActive} onAdd={add} onChange={change} />

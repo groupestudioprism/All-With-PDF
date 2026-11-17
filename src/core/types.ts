@@ -42,7 +42,7 @@ export interface Tool {
   /** Nombre exact de fichiers (comparaison) */
   exactFiles?: number;
   options: OptionDef[];
-  /** Sortie = PDF(s) → peut être chaîné dans un workflow */
+  /** Sortie = PDF(s), peut être chaîné dans un workflow */
   outputsPdf: boolean;
   /** Interface dédiée au lieu du formulaire générique */
   custom?: 'organize' | 'editor';

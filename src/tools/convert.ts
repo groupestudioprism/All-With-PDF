@@ -63,8 +63,8 @@ const imgOptions = (enhanceDefault: boolean) => [
 
 export const imageToPdf: Tool = {
   id: 'image-to-pdf',
-  name: 'Image → PDF',
-  icon: '🖼️',
+  name: 'Image vers PDF',
+  icon: 'image',
   category: 'to-pdf',
   description: 'JPG, PNG, WebP, GIF, BMP… en un seul PDF, dans l\'ordre de votre choix.',
   accept: 'image',
@@ -78,8 +78,8 @@ export const imageToPdf: Tool = {
 
 export const scanToPdf: Tool = {
   id: 'scan-to-pdf',
-  name: 'Scanner → PDF',
-  icon: '📷',
+  name: 'Scanner vers PDF',
+  icon: 'scan',
   category: 'organize',
   description: 'Photographiez ou importez vos documents : redressement des contrastes et PDF propre en un clic.',
   accept: 'image',
@@ -93,8 +93,8 @@ export const scanToPdf: Tool = {
 
 export const pdfToImage: Tool = {
   id: 'pdf-to-image',
-  name: 'PDF → Image',
-  icon: '🏞️',
+  name: 'PDF vers image',
+  icon: 'image',
   category: 'from-pdf',
   description: 'Chaque page en JPG, PNG ou WebP, résolution jusqu\'à 600 dpi.',
   accept: 'pdf',
@@ -164,8 +164,8 @@ async function extractText(f: File, pagesSpec: string, progress: (r: number) => 
 
 export const pdfToText: Tool = {
   id: 'pdf-to-text',
-  name: 'PDF → Texte',
-  icon: '📄',
+  name: 'PDF vers texte',
+  icon: 'text',
   category: 'from-pdf',
   description: 'Extrait tout le texte en .txt, dans l\'ordre de lecture.',
   accept: 'pdf',
@@ -181,8 +181,8 @@ export const pdfToText: Tool = {
 
 export const pdfToMarkdown: Tool = {
   id: 'pdf-to-markdown',
-  name: 'PDF → Markdown',
-  icon: '📝',
+  name: 'PDF vers Markdown',
+  icon: 'markdown',
   category: 'intelligence',
   description: 'Texte structuré (titres, listes, paragraphes) prêt pour une IA, une doc ou un wiki.',
   accept: 'pdf',

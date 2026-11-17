@@ -15,7 +15,7 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const redact: Tool = {
   id: 'redact',
   name: 'Caviarder PDF',
-  icon: '🕶️',
+  icon: 'redact',
   category: 'security',
   description: 'Recherche automatique (mots, e-mails, téléphones, IBAN, cartes) puis suppression DÉFINITIVE : les pages touchées sont rasterisées, le texte caché disparaît vraiment.',
   accept: 'pdf',
@@ -115,7 +115,7 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export const compare: Tool = {
   id: 'compare',
   name: 'Comparer PDF',
-  icon: '⚖️',
+  icon: 'compare',
   category: 'intelligence',
   description: 'Comparez deux versions page par page : ajouts et suppressions surlignés dans un rapport HTML.',
   accept: 'pdf',
@@ -139,7 +139,7 @@ export const compare: Tool = {
       let ia = 0, ib = 0, changes = 0;
       const rows = ops.map((op) => {
         if (op.t === '=') { ia++; ib++; return `<div class="eq">${esc(rawB[ib - 1])}</div>`; }
-        if (op.t === '-') { removed++; changes++; return `<div class="del">− ${esc(rawA[ia++])}</div>`; }
+        if (op.t === '-') { removed++; changes++; return `<div class="del">- ${esc(rawA[ia++])}</div>`; }
         added++; changes++; return `<div class="add">+ ${esc(rawB[ib++])}</div>`;
       });
       sections.push(`<section><h2>Page ${i} ${changes ? `<span class="badge">${changes} différence(s)</span>` : '<span class="ok">identique</span>'}</h2>${rows.join('')}</section>`);
@@ -150,7 +150,7 @@ body{font:14px/1.5 system-ui,sans-serif;max-width:900px;margin:2rem auto;padding
 h1{margin-bottom:.2rem}.sum{color:#555;margin-bottom:1.5rem}section{border:1px solid #ddd;border-radius:10px;padding:.5rem 1rem 1rem;margin:1rem 0}
 .eq{color:#666}.add{background:#e6ffec;color:#116329;padding:1px 6px;border-radius:4px;margin:1px 0}.del{background:#ffebe9;color:#82071e;padding:1px 6px;border-radius:4px;margin:1px 0;text-decoration:line-through}
 .badge{font-size:12px;background:#fff4d6;color:#7a5a00;padding:2px 8px;border-radius:99px}.ok{font-size:12px;color:#2a8a3e}</style>
-<h1>Comparaison de PDF</h1><div class="sum"><b>${esc(A.name)}</b> (${pa.numPages} p.) ↔ <b>${esc(B.name)}</b> (${pb.numPages} p.) — ${added} ajout(s), ${removed} suppression(s)</div>${sections.join('')}</html>`;
+<h1>Comparaison de PDF</h1><div class="sum"><b>${esc(A.name)}</b> (${pa.numPages} p.) et <b>${esc(B.name)}</b> (${pb.numPages} p.) — ${added} ajout(s), ${removed} suppression(s)</div>${sections.join('')}</html>`;
     void getPdfjs;
     return [{ name: `comparaison_${baseName(A.name)}_vs_${baseName(B.name)}.html`, data: new TextEncoder().encode(html), mime: 'text/html', note: `${added} ajout(s), ${removed} suppression(s).` }];
   },

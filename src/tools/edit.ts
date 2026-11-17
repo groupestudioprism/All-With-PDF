@@ -23,7 +23,7 @@ function safeText(font: { encodeText: (t: string) => unknown }, text: string) {
 export const rotate: Tool = {
   id: 'rotate',
   name: 'Pivoter PDF',
-  icon: '🔄',
+  icon: 'rotate',
   category: 'edit',
   description: 'Faites pivoter toutes les pages ou seulement certaines.',
   accept: 'pdf',
@@ -46,7 +46,7 @@ export const rotate: Tool = {
 export const pageNumbers: Tool = {
   id: 'page-numbers',
   name: 'Numéroter les pages',
-  icon: '🔢',
+  icon: 'numbers',
   category: 'edit',
   description: 'Ajoutez une numérotation personnalisable (position, format, départ).',
   accept: 'pdf',
@@ -86,7 +86,7 @@ export const pageNumbers: Tool = {
 export const watermark: Tool = {
   id: 'watermark',
   name: 'Filigrane',
-  icon: '💧',
+  icon: 'watermark',
   category: 'edit',
   description: 'Texte en filigrane : centré ou en mosaïque, avec angle et opacité.',
   accept: 'pdf',
@@ -128,7 +128,7 @@ export const watermark: Tool = {
 export const crop: Tool = {
   id: 'crop',
   name: 'Rogner PDF',
-  icon: '📐',
+  icon: 'crop',
   category: 'edit',
   description: 'Marges manuelles ou rognage automatique sur le contenu visible.',
   accept: 'pdf',
@@ -182,7 +182,7 @@ export const crop: Tool = {
 export const flatten: Tool = {
   id: 'flatten',
   name: 'Aplatir formulaires',
-  icon: '📎',
+  icon: 'flatten',
   category: 'edit',
   description: 'Fige les champs de formulaire remplis en contenu non modifiable.',
   accept: 'pdf',
@@ -203,7 +203,7 @@ export const flatten: Tool = {
 export const metadata: Tool = {
   id: 'metadata',
   name: 'Métadonnées',
-  icon: '🏷️',
+  icon: 'metadata',
   category: 'security',
   description: 'Modifiez ou effacez titre, auteur, mots-clés… avant de partager un document.',
   accept: 'pdf',
@@ -231,7 +231,7 @@ export const metadata: Tool = {
 export const nUp: Tool = {
   id: 'n-up',
   name: 'Pages par feuille',
-  icon: '🧱',
+  icon: 'nup',
   category: 'organize',
   description: 'Imprimez plusieurs pages sur une même feuille (2, 4, 6, 9… vignettes).',
   accept: 'pdf',
@@ -273,7 +273,7 @@ export const nUp: Tool = {
 export const editor: Tool = {
   id: 'editor',
   name: 'Éditer & signer PDF',
-  icon: '✏️',
+  icon: 'editor',
   category: 'edit',
   description: 'Éditeur visuel : texte, formes, surlignage, dessin, images, signature manuscrite, blanc de correction et caviardage définitif.',
   accept: 'pdf',

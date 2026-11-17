@@ -5,6 +5,7 @@ import { takeHandoff } from '../core/store';
 import { Dropzone, FileList, OptionsForm, ProgressBar, Results, runTool, useRunner } from './Common';
 import { Organizer } from './Organizer';
 import { Editor } from './Editor';
+import { Icon } from './Icon';
 
 export function ToolPage({ tool }: { tool: Tool }) {
   const [files, setFiles] = useState<File[]>(() => takeHandoff() ?? []);
@@ -17,7 +18,7 @@ export function ToolPage({ tool }: { tool: Tool }) {
 
   return (
     <div>
-      <div className="page-title"><span className="ic">{tool.icon}</span><h1>{tool.name}</h1></div>
+      <div className="page-title"><span className="tile"><Icon name={tool.icon} size={24} /></span><h1>{tool.name}</h1></div>
       <p className="lead">{tool.description}</p>
       {tool.custom === 'organize' ? <Organizer initial={initialFiles} />
         : tool.custom === 'editor' ? <Editor initial={initialFiles} />
@@ -31,13 +32,13 @@ export function ToolPage({ tool }: { tool: Tool }) {
             {ready && (
               <div className="row">
                 <button className="btn primary" disabled={r.busy} onClick={() => r.run((p) => runTool(tool, files, opts, p))}>
-                  {r.busy ? 'Traitement…' : `${tool.icon} ${tool.name}`}
+                  {r.busy ? 'Traitement en cours' : tool.name}
                 </button>
-                {!tool.multiple && files.length > 1 && <span className="muted">{files.length} fichiers : traitement un par un (traitement par lots illimité)</span>}
+                {!tool.multiple && files.length > 1 && <span className="muted">{files.length} fichiers : traités l'un après l'autre</span>}
               </div>
             )}
             <ProgressBar busy={r.busy} ratio={r.ratio} msg={r.msg} />
-            {r.error && <div className="err">{r.error}</div>}
+            {r.error && <div className="err"><Icon name="alert" />{r.error}</div>}
             {r.outputs && <Results outputs={r.outputs} />}
           </div>
         )}
