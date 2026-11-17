@@ -1,13 +1,13 @@
 export type CategoryId = 'organize' | 'optimize' | 'to-pdf' | 'from-pdf' | 'edit' | 'security' | 'intelligence';
 
 export const CATEGORIES: { id: CategoryId; label: string; color: string }[] = [
-  { id: 'organize', label: 'Organiser', color: '#f97316' },
-  { id: 'optimize', label: 'Optimiser', color: '#22c55e' },
-  { id: 'to-pdf', label: 'Convertir en PDF', color: '#eab308' },
-  { id: 'from-pdf', label: 'Convertir depuis PDF', color: '#3b82f6' },
-  { id: 'edit', label: 'Modifier', color: '#a855f7' },
-  { id: 'security', label: 'Sécurité', color: '#ef4444' },
-  { id: 'intelligence', label: 'Analyse', color: '#14b8a6' },
+  { id: 'organize', label: 'Organiser', color: '#003266' },
+  { id: 'optimize', label: 'Optimiser', color: '#039aa0' },
+  { id: 'to-pdf', label: 'Convertir en PDF', color: '#0a7aa5' },
+  { id: 'from-pdf', label: 'Convertir depuis PDF', color: '#0a5a85' },
+  { id: 'edit', label: 'Modifier', color: '#1d4f91' },
+  { id: 'security', label: 'Sécurité', color: '#001645' },
+  { id: 'intelligence', label: 'Analyse', color: '#0ab5b8' },
 ];
 
 export type OptionDef = { key: string; label: string; help?: string } & (

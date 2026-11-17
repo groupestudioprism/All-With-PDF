@@ -105,7 +105,7 @@ export default function App() {
         {!home && <a className="crumb" href="#/"><Icon name="arrow" size={15} style={{ transform: 'rotate(180deg)' }} /> Tous les outils</a>}
         {hash.startsWith('#/workflows') ? <Workflows /> : tool ? <ToolPage key={tool.id + hash} tool={tool} /> : <Home />}
       </main>
-      <footer className="footer"><div className="in"><span className="logo"><LogoMark size={22} /><span className="word">All With <b>PDF</b></span></span><span className="grow" /><span>Vos fichiers restent sur votre appareil.</span><a href="https://github.com/groupestudioprism/All-With-PDF" target="_blank" rel="noreferrer">Code source</a></div></footer>
+      <footer className="footer"><div className="in"><span className="logo"><LogoMark size={22} /><span className="word">All With <b>PDF</b></span></span><span className="grow" /><span>Vos fichiers restent sur votre appareil.</span><span>Aucun envoi, aucune limite.</span></div></footer>
     </>
   );
 }
