@@ -4,7 +4,7 @@
  * -> grille de cellules (fusions, lignes continuées) -> typage des valeurs.
  */
 
-export interface Frag { x: number; x2: number; y: number; size: number; str: string }
+export interface Frag { x: number; x2: number; y: number; size: number; str: string; font?: string }
 export interface Cell { text: string; x: number; x2: number; c0: number; c1: number }
 export interface Row { y: number; size: number; cells: Cell[] }
 export interface Table {
@@ -14,6 +14,9 @@ export interface Table {
   header: boolean;
   seps: number[];              // positions des séparateurs de colonnes (pt)
   x0: number;
+  colPts?: number[];           // largeur des colonnes dans le PDF (pt)
+  top?: number;
+  page0?: number;
 }
 
 export function fragments(content: { items: any[] }): Frag[] {
@@ -168,7 +171,7 @@ export function buildTable(blockRows: Row[], page: number, minCols = 2): Table |
   const first = trimmed[0];
   const header = trimmed.length > 1 && first.filter(Boolean).length >= 2 && first.every((v) => !v || !isNumLike(v)) &&
     trimmed.slice(1).some((r) => r.some((v) => v && isNumLike(v)));
-  return { page, rows: trimmed, merges: mm, header, seps, x0: blockRows[0].cells[0].x };
+  return { page, rows: trimmed, merges: mm, header, seps, x0: blockRows[0].cells[0].x, top: blockRows[0].y };
 }
 
 /** Rassemble les tableaux qui se poursuivent d'une page à l'autre (même grille de colonnes). */
@@ -178,12 +181,29 @@ export function joinAcrossPages(tables: Table[]): Table[] {
     const prev = res[res.length - 1];
     const same = prev && t.page === prev.page + 1 && prev.rows[0].length === t.rows[0].length &&
       prev.seps.length === t.seps.length && prev.seps.every((s, i) => Math.abs(s - t.seps[i]) < 10);
-    if (!same) { res.push({ ...t, rows: t.rows.map((r) => [...r]), merges: [...t.merges] }); continue; }
+    if (!same) { res.push({ ...t, page0: t.page, rows: t.rows.map((r) => [...r]), merges: [...t.merges] }); continue; }
     let start = 0;
     if (prev.header && t.rows[0].join('|') === prev.rows[0].join('|')) start = 1; // en-tête répété
+    // ligne de section répétée en haut de page (ex. « A  TERRASSEMENTS »), suivie parfois de la fin de l'article précédent
+    const f = t.rows[start];
+    if (f && /^[A-Za-z0-9]{1,3}$/.test(f[0])) {
+      const title = (f[1] ?? '').split('\n')[0];
+      const sec = prev.rows.find((r) => r[0] === f[0] && (r[1] ?? '').split('\n')[0] === title);
+      if (sec) {
+        const rest = f.map((v, c) => (c === 1 ? v.split('\n').slice(1).join('\n') : c === 0 ? '' : v));
+        start++;
+        const last0 = prev.rows[prev.rows.length - 1];
+        if (rest.some(Boolean) && last0) rest.forEach((v, c) => { if (v) last0[c] = last0[c] ? last0[c] + '\n' + v : v; });
+      }
+    }
+    // ligne sans numéro : suite de l'article coupé par le saut de page
+    const g = t.rows[start], last = prev.rows[prev.rows.length - 1];
+    let carry = 0;
+    if (g && !g[0] && last && last[0]) { g.forEach((v, c) => { if (v) last[c] = last[c] ? last[c] + '\n' + v : v; }); start++; carry = 1; }
     const off = prev.rows.length - start;
     prev.rows.push(...t.rows.slice(start));
     prev.merges.push(...t.merges.filter((m) => m.r >= start).map((m) => ({ ...m, r: m.r + off })));
+    void carry;
     prev.page = t.page;
   }
   return res;
@@ -247,4 +267,207 @@ export function parseValue(raw: string, dec: ',' | '.', convert = true): Value {
   if (pct) { v /= 100; fmt = '0' + zeros + '%'; }
   if (cur) fmt = `${hasSep || frac ? '#,##0' + (zeros || '.00') : '0'}\\ "${cur}"`;
   return { t: 'n', v, fmt };
+}
+
+// ------------------------------------------------------------------ traits dessinés
+export interface VLine { x: number; y0: number; y1: number }
+export interface HLine { y: number; x0: number; x1: number }
+export interface Rules { v: VLine[]; h: HLine[]; marks: { x: number; x2: number; y: number }[] }
+
+type M = [number, number, number, number, number, number];
+const mul = (a: M, b: M): M => [
+  a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1],
+  a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3],
+  a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
+const pt = (m: M, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+
+/** Lit les traits et rectangles fins (bordures de tableau) dessinés sur la page. */
+export async function pageRules(page: any, OPS: Record<string, number>): Promise<Rules> {
+  const ol = await page.getOperatorList();
+  const v: VLine[] = [], h: HLine[] = [], marks: Rules['marks'] = [];
+  let ctm: M = [1, 0, 0, 1, 0, 0];
+  const stack: M[] = [];
+  let lineW = 1;
+  const FILL = new Set([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  const STROKE = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  const addSeg = (x0: number, y0: number, x1: number, y1: number) => {
+    if (Math.abs(x1 - x0) < 0.6 && Math.abs(y1 - y0) >= 6) v.push({ x: (x0 + x1) / 2, y0: Math.min(y0, y1), y1: Math.max(y0, y1) });
+    else if (Math.abs(y1 - y0) < 0.6 && Math.abs(x1 - x0) >= 6) h.push({ y: (y0 + y1) / 2, x0: Math.min(x0, x1), x1: Math.max(x0, x1) });
+  };
+  for (let i = 0; i < ol.fnArray.length; i++) {
+    const fn = ol.fnArray[i], a = ol.argsArray[i];
+    if (fn === OPS.save) stack.push([...ctm] as M);
+    else if (fn === OPS.restore) ctm = stack.pop() ?? ctm;
+    else if (fn === OPS.transform) ctm = mul(ctm, a as M);
+    else if (fn === OPS.setLineWidth) lineW = a[0];
+    else if (fn === OPS.paintImageXObject || fn === OPS.paintImageMaskXObject || fn === OPS.paintInlineImageXObject) {
+      const w = Math.hypot(ctm[0], ctm[1]), hh = Math.hypot(ctm[2], ctm[3]);
+      if (w >= 1.5 && w <= 14 && hh >= 1.5 && hh <= 14) marks.push({ x: ctm[4], x2: ctm[4] + w, y: ctm[5] + hh / 2 }); // puces dessinées en image
+    }
+    else if (fn === OPS.constructPath) {
+      const paint = a[0] as number; const d = a[1] as ArrayLike<number>[] | ArrayLike<number>;
+      const data: number[] = Array.isArray(d) && d.length && typeof (d as any)[0] !== 'number' ? Array.from((d as any)[0]) : Array.from(d as any);
+      // sous-chemins : 0 = moveTo, 1 = lineTo, 2 = curveTo, 4 = close
+      const subs: [number, number][][] = []; let cur: [number, number][] = [];
+      for (let k = 0; k < data.length;) {
+        const op = data[k];
+        if (op === 0) { if (cur.length) subs.push(cur); cur = [[data[k + 1], data[k + 2]]]; k += 3; }
+        else if (op === 1) { cur.push([data[k + 1], data[k + 2]]); k += 3; }
+        else if (op === 2) { cur.push([data[k + 5], data[k + 6]]); k += 7; }
+        else k += 1;
+      }
+      if (cur.length) subs.push(cur);
+      const isFill = FILL.has(paint), isStroke = STROKE.has(paint);
+      if (!isFill && !isStroke) continue;
+      for (const sp of subs) {
+        const p = sp.map(([x, y]) => pt(ctm, x, y));
+        if (p.length === 2 && isStroke) addSeg(p[0][0], p[0][1], p[1][0], p[1][1]);
+        else if (p.length >= 4 && p.length <= 5) {
+          const xs = p.map((q) => q[0]), ys = p.map((q) => q[1]);
+          const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+          const axis = p.every((q) => xs.some((x) => Math.abs(x - q[0]) < 0.01) && ys.some((y) => Math.abs(y - q[1]) < 0.01));
+          if (!axis) continue;
+          const w = x1 - x0, hgt = y1 - y0;
+          if (isFill && w <= 2.5 && hgt >= 6) v.push({ x: (x0 + x1) / 2, y0, y1 });
+          else if (isFill && hgt <= 2.5 && w >= 6) h.push({ y: (y0 + y1) / 2, x0, x1 });
+          else if (isStroke) { addSeg(x0, y0, x0, y1); addSeg(x1, y0, x1, y1); addSeg(x0, y0, x1, y0); addSeg(x0, y1, x1, y1); }
+        }
+      }
+    }
+  }
+  void lineW;
+  return { v, h, marks };
+}
+
+// ------------------------------------------------------------------ tableaux à bordures
+const clean = (s: string) => s.replace(/[-❯➤►▶•●▪]/g, '•').replace(/\s+/g, ' ').trim();
+
+function cluster(vals: number[], tol: number): number[] {
+  const s = [...vals].sort((a, b) => a - b); const out: number[][] = [];
+  for (const v of s) { const g = out[out.length - 1]; if (g && v - g[g.length - 1] <= tol) g.push(v); else out.push([v]); }
+  return out.map((g) => g.reduce((a, b) => a + b, 0) / g.length);
+}
+
+/** Texte d'une cellule : lignes reconstituées, retour à la ligne seulement en fin de paragraphe. */
+function cellText(fr: Frag[], left: number, right: number): string {
+  if (!fr.length) return '';
+  const lines: { y: number; x: number; x2: number; items: Frag[]; size: number; bul?: boolean }[] = [];
+  for (const f of [...fr].sort((a, b) => b.y - a.y || a.x - b.x)) {
+    const l = lines.find((l) => Math.abs(l.y - f.y) < Math.min(l.size, f.size) * 0.45);
+    const bul = f.str === '•';
+    if (l) { l.items.push(f); if (!bul) { l.x = l.bul ? f.x : Math.min(l.x, f.x); l.x2 = Math.max(l.x2, f.x2); l.bul = false; } }
+    else lines.push({ y: f.y, x: f.x, x2: f.x2, items: [f], size: f.size, bul });
+  }
+  lines.sort((a, b) => b.y - a.y);
+  const texts = lines.map((l) => {
+    l.items.sort((a, b) => a.x - b.x);
+    let t = '', end = -Infinity;
+    for (const it of l.items) { t += (t && it.x - end > it.size * 0.12 && !/\s$/.test(t) && !/^\s/.test(it.str) ? ' ' : '') + it.str; end = Math.max(end, it.x2); }
+    return clean(t);
+  });
+  const w = Math.max(1, right - left);
+  const pitches = lines.slice(1).map((l, i) => lines[i].y - l.y);
+  const m = pitches.length >= 3 ? median(pitches) : 0;
+  const fontOf = (i: number) => lines[i].items[0]?.font;
+  let out = '';
+  lines.forEach((l, i) => {
+    if (!texts[i]) return;
+    if (!out) { out = texts[i]; return; }
+    const p = lines[i - 1];
+    const gap = p.y - l.y;
+    const brk = p.x2 < right - Math.max(8, w * 0.1) || Math.abs(l.x - p.x) > 4 || /^•/.test(texts[i]) ||
+      gap > (m ? m * 1.18 + 0.5 : l.size * 1.45) || (!!fontOf(i) && !!fontOf(i - 1) && fontOf(i) !== fontOf(i - 1));
+    out += (brk ? '\n' : /[a-zà-ÿ]-$/i.test(out) && /^[a-zà-ÿ]/.test(texts[i]) ? '' : ' ') + texts[i];
+  });
+  return out;
+}
+
+export interface RuledResult { tables: Table[]; used: Set<Frag> }
+
+/** Reconstruit les tableaux délimités par des traits verticaux (colonnes) et horizontaux (lignes). */
+export function ruledTables(frags0: Frag[], rules: Rules, page: number): RuledResult {
+  const used = new Set<Frag>();
+  const sz = median(frags0.map((f) => f.size)) || 10;
+  const bullets: Frag[] = rules.marks.map((m) => ({ x: m.x, x2: m.x2, y: m.y - sz * 0.3, size: sz, str: '•' }));
+  const frags = [...frags0, ...bullets];
+  // 1. régions : traits verticaux regroupés par recouvrement vertical
+  const segs = [...rules.v].sort((a, b) => a.y0 - b.y0);
+  const comps: { segs: VLine[]; y0: number; y1: number }[] = [];
+  for (const s of segs) {
+    const c = comps.find((c) => s.y0 <= c.y1 + 5 && s.y1 >= c.y0 - 5);
+    if (c) { c.segs.push(s); c.y0 = Math.min(c.y0, s.y0); c.y1 = Math.max(c.y1, s.y1); } else comps.push({ segs: [s], y0: s.y0, y1: s.y1 });
+  }
+  // fusion des composantes qui se rejoignent après agrandissement
+  for (let again = true; again;) {
+    again = false;
+    for (let i = 0; i < comps.length && !again; i++) for (let j = i + 1; j < comps.length; j++) {
+      if (comps[j].y0 <= comps[i].y1 + 5 && comps[j].y1 >= comps[i].y0 - 5) {
+        comps[i].segs.push(...comps[j].segs); comps[i].y0 = Math.min(comps[i].y0, comps[j].y0); comps[i].y1 = Math.max(comps[i].y1, comps[j].y1); comps.splice(j, 1); again = true; break;
+      }
+    }
+  }
+  const tables: Table[] = [];
+  for (const comp of comps) {
+    const edges = cluster(comp.segs.map((s) => s.x), 2.5).filter((x) => comp.segs.filter((s) => Math.abs(s.x - x) <= 2.5).reduce((a, s) => a + s.y1 - s.y0, 0) >= 14);
+    // bordures extérieures non tracées en vertical : on prolonge jusqu'aux traits horizontaux
+    const near = rules.h.filter((h) => h.y >= comp.y0 - 2 && h.y <= comp.y1 + 2);
+    if (edges.length) {
+      const l0 = Math.min(...near.filter((h) => h.x1 > edges[0] - 1 && h.x0 < edges[0] - 6).map((h) => h.x0), Infinity);
+      const r0 = Math.max(...near.filter((h) => h.x0 < edges[edges.length - 1] + 1 && h.x1 > edges[edges.length - 1] + 6).map((h) => h.x1), -Infinity);
+      if (isFinite(l0)) edges.unshift(l0);
+      if (isFinite(r0)) edges.push(r0);
+    }
+    if (edges.length < 3 || comp.y1 - comp.y0 < 12) continue;
+    const left = edges[0], right = edges[edges.length - 1], ncols = edges.length - 1;
+    const { y0, y1 } = comp;
+    // 2. coupes horizontales
+    const hs = rules.h.filter((h) => h.y >= y0 - 2 && h.y <= y1 + 2 && h.x1 > left && h.x0 < right);
+    const ys = cluster(hs.map((h) => h.y), 2);
+    const cuts = ys.filter((y) => {
+      const cov = hs.filter((h) => Math.abs(h.y - y) <= 2).map((h) => [Math.max(h.x0, left), Math.min(h.x1, right)] as [number, number]).sort((a, b) => a[0] - b[0]);
+      let len = 0, cur = -Infinity; for (const [a, b] of cov) { const s = Math.max(a, cur); if (b > s) len += b - s; cur = Math.max(cur, b); }
+      return len >= (right - left) * 0.5;
+    }).sort((a, b) => b - a);
+    const inside = frags.filter((f) => f.x2 > left - 1 && f.x < right + 1 && f.y + f.size * 0.3 >= y0 - 1 && f.y <= y1 + 1);
+    if (!inside.length) continue;
+    // bandes
+    let bands: [number, number][] = [];
+    const colAt = (x: number) => { for (let c = 0; c < ncols; c++) if (x < edges[c + 1] - 0.5) return Math.max(0, c); return ncols - 1; };
+    // Colonne d'identifiants (N° d'article) : chaque identifiant ouvre un enregistrement multi-lignes
+    const idRe = /^[A-Za-z]{0,3}[\dIVX]*(\.\d+)*\.?$/;
+    const anchors = toRows(inside.filter((f) => colAt(f.x + 1) === 0).map((f) => ({ ...f })));
+    const idLike = anchors.filter((a) => a.cells.length === 1 && a.cells[0].text.length <= 10 && idRe.test(a.cells[0].text)).length;
+    const idMode = anchors.length >= 3 && idLike >= anchors.length * 0.7;
+    if (idMode) {
+      const cutAt = anchors.map((a) => a.y + a.size * 0.85);
+      bands = anchors.map((_, i) => [i === 0 ? Infinity : cutAt[i], i === anchors.length - 1 ? -Infinity : cutAt[i + 1]] as [number, number]);
+    } else {
+      const top = Math.max(y1, ...cuts), bot = Math.min(y0, ...cuts);
+      const all = [top, ...cuts.filter((c) => c < top - 1 && c > bot + 1), bot];
+      for (let i = 0; i + 1 < all.length; i++) if (all[i] - all[i + 1] > 3) bands.push([all[i], all[i + 1]]);
+      if (bands.length < 2) bands = toRows(inside.map((f) => ({ ...f }))).map((r) => [r.y + r.size, r.y - r.size * 0.35] as [number, number]);
+    }
+    const colRanges = Array.from({ length: ncols }, (_, c) => [edges[c], edges[c + 1]] as [number, number]);
+    const rows: string[][] = []; const merges: Table['merges'] = [];
+    for (const [bt, bb] of bands) {
+      const inBand = inside.filter((f) => { const cy = f.y + f.size * 0.3; return cy <= bt + 0.5 && cy > bb - 0.5; });
+      const perCol: Frag[][] = Array.from({ length: ncols }, () => []);
+      let span: { c0: number; c1: number } | null = null;
+      for (const f of inBand) {
+        const c = colAt(f.x + 1); perCol[c].push(f); used.add(f);
+        const c1 = colAt(f.x2 - 1); if (c1 > c) span = { c0: c, c1 };
+      }
+      const cells = perCol.map((fr, c) => cellText(fr, colRanges[c][0], colRanges[c][1]));
+      if (cells.every((t) => !t)) continue;
+      rows.push(cells);
+      if (span && cells.slice(span.c0 + 1, span.c1 + 1).every((t) => !t)) merges.push({ r: rows.length - 1, c0: span.c0, c1: span.c1 });
+    }
+    if (!rows.length) continue;
+    const finalRows = rows, finalMerges = merges;
+    const first = finalRows[0];
+    const header = finalRows.length > 1 && first.filter(Boolean).length >= 2 && first.every((v) => !v || !isNumLike(v)) &&
+      finalRows.slice(1).some((r) => r.some((v) => v && isNumLike(v)));
+    tables.push({ page, rows: finalRows, merges: finalMerges, header, seps: edges.slice(1, -1), x0: left, colPts: colRanges.map(([a, b]) => b - a), top: y1 });
+  }
+  return { tables, used };
 }

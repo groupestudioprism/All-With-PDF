@@ -186,5 +186,34 @@ await test('PDF vers Excel : tableaux, types, pages jointes', async () => {
   await assert.rejects(run('pdf-to-csv', [new File([await empty.save() as BlobPart], 'v.pdf')]), /texte/);
 });
 
+await test('PDF vers Excel : tableau à bordures, articles multi-lignes', async () => {
+  const doc = await PDFDocument.create();
+  const f = await doc.embedFont(StandardFonts.Helvetica);
+  const X = [40, 100, 360, 440];
+  const hline = (p: any, y: number) => p.drawLine({ start: { x: X[0], y }, end: { x: X[3], y }, thickness: 0.7 });
+  const entete = (p: any) => { for (const x of X) p.drawLine({ start: { x, y: 120 }, end: { x, y: 360 }, thickness: 0.7 }); };
+  const items: [string, string[], string][] = [['A', ['TERRASSEMENTS'], ''], ['A.1', ['Fouille en tranchee', 'Le prix remunere le metre cube, avec', 'toutes sujetions.'], ''], ['A.1.1', ['Diametre 100 mm', 'Le metre cube : DIX EUROS'], '10,00'], ['A.1.2', ['Diametre 160 mm', 'Le metre cube : DOUZE EUROS'], '12,50']];
+  const p = doc.addPage([500, 400]);
+  entete(p);
+  p.drawText('N°', { x: 44, y: 345, size: 10, font: f }); p.drawText('Libelle', { x: 104, y: 345, size: 10, font: f }); p.drawText('PRIX UNITAIRE', { x: 364, y: 345, size: 9, font: f });
+  let y = 335; hline(p, y + 4); hline(p, 120);
+  for (const [id, lines, price] of items) {
+    const top = y;
+    p.drawText(id, { x: 44, y: y - 12, size: 10, font: f });
+    lines.forEach((l, i) => p.drawText(l, { x: 104, y: y - 12 - i * 12, size: 10, font: f }));
+    if (price) p.drawText(price, { x: 400, y: y - 12 - (lines.length - 1) * 12, size: 10, font: f });
+    y -= lines.length * 12 + 10; hline(p, y + 4); void top;
+  }
+  const file = new File([await doc.save() as BlobPart], 'b.pdf', { type: 'application/pdf' });
+  const [x] = await run('pdf-to-csv', [file]);
+  const JSZip = (await import('jszip')).default;
+  const z = await JSZip.loadAsync(x.data as Uint8Array);
+  const sh = await z.file('xl/worksheets/sheet1.xml')!.async('string');
+  assert.match(x.note!, /1 tableau/);
+  assert.equal((sh.match(/<row /g) || []).length, 5); // en-tête + A + A.1 + A.1.1 + A.1.2
+  assert.match(sh, /Le prix remunere le metre cube, avec\ntoutes sujetions\./);
+  assert.match(sh, /Le metre cube : DIX EUROS/); assert.match(sh, /<v>12\.5<\/v>/); assert.match(sh, /<v>10<\/v>/);
+});
+
 console.log(failed ? `\n${failed} test(s) en échec` : '\nTous les tests passent');
 process.exit(failed ? 1 : 0);

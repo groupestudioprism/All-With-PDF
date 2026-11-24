@@ -1,13 +1,14 @@
 import JSZip from 'jszip';
 import type { Value } from './tables';
 
-export interface SheetCell { v: Value | null; header?: boolean; wrap?: boolean }
+export interface SheetCell { v: Value | null; header?: boolean; wrap?: boolean; section?: boolean }
 export interface SheetData {
   name: string;
   rows: SheetCell[][];
   merges: { r: number; c0: number; c1: number }[];
   freezeHeader: boolean;
   filter: boolean;
+  colWidths?: number[];
 }
 
 const esc = (s: string) => s.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
@@ -35,12 +36,12 @@ export async function writeXlsx(sheets: SheetData[]): Promise<Uint8Array> {
   // 0 : défaut. Les styles sont créés à la demande.
   xfs.push('<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>');
   xfKey.set('0|0|0|0', 0);
-  const xf = (fmt: string | undefined, header: boolean, wrap: boolean, date: boolean) => {
+  const xf = (fmt: string | undefined, header: boolean, wrap: boolean, date: boolean, section = false) => {
     const id = date ? 14 : fmtId(fmt);
-    const key = `${id}|${header ? 1 : 0}|${wrap ? 1 : 0}|${date ? 1 : 0}`;
+    const key = `${id}|${header ? 1 : 0}|${wrap ? 1 : 0}|${date ? 1 : 0}|${section ? 1 : 0}`;
     if (xfKey.has(key)) return xfKey.get(key)!;
     const align = `<alignment vertical="${header ? 'center' : 'top'}"${wrap || header ? ' wrapText="1"' : ''}${header ? ' horizontal="left"' : ''}/>`;
-    xfs.push(`<xf numFmtId="${id}" fontId="${header ? 1 : 0}" fillId="${header ? 2 : 0}" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">${align}</xf>`);
+    xfs.push(`<xf numFmtId="${id}" fontId="${header ? 1 : section ? 2 : 0}" fillId="${header ? 2 : section ? 3 : 0}" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1">${align}</xf>`);
     xfKey.set(key, xfs.length - 1);
     return xfs.length - 1;
   };
@@ -54,20 +55,21 @@ export async function writeXlsx(sheets: SheetData[]): Promise<Uint8Array> {
       const cells = row.map((c, ci) => {
         const ref = colName(ci) + (ri + 1);
         const v = c.v;
-        if (!v || (v.t === 's' && !v.s)) return `<c r="${ref}" s="${xf(undefined, !!c.header, false, false)}"/>`;
+        if (!v || (v.t === 's' && !v.s)) return `<c r="${ref}" s="${xf(undefined, !!c.header, false, false, !!c.section)}"/>`;
         if (v.t === 's') {
           const lines = v.s.split('\n');
           widths[ci] = Math.max(widths[ci], Math.min(60, Math.max(...lines.map((l) => l.length)) + 2));
           const wrap = c.wrap || lines.length > 1;
-          return `<c r="${ref}" s="${xf(undefined, !!c.header, wrap, false)}" t="inlineStr"><is><t xml:space="preserve">${esc(v.s)}</t></is></c>`;
+          return `<c r="${ref}" s="${xf(undefined, !!c.header, wrap, false, !!c.section)}" t="inlineStr"><is><t xml:space="preserve">${esc(v.s)}</t></is></c>`;
         }
         if (v.t === 'd') { widths[ci] = Math.max(widths[ci], 12); return `<c r="${ref}" s="${xf(undefined, false, false, true)}"><v>${v.v}</v></c>`; }
         widths[ci] = Math.max(widths[ci], Math.min(24, String(v.v).length + 3));
-        return `<c r="${ref}" s="${xf(v.fmt, false, false, false)}"><v>${v.v}</v></c>`;
+        return `<c r="${ref}" s="${xf(v.fmt, false, false, false, !!c.section)}"><v>${v.v}</v></c>`;
       }).join('');
       return `<row r="${ri + 1}">${cells}</row>`;
     }).join('');
     const last = `${colName(ncols - 1)}${Math.max(1, sh.rows.length)}`;
+    sh.colWidths?.forEach((w, i) => { if (i < ncols) widths[i] = w; });
     const cols = `<cols>${widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${Math.max(8, w).toFixed(1)}" customWidth="1"/>`).join('')}</cols>`;
     const pane = sh.freezeHeader ? '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft"/>' : '';
     const filter = sh.filter && sh.rows.length > 1 ? `<autoFilter ref="A1:${last}"/>` : '';
@@ -77,8 +79,8 @@ export async function writeXlsx(sheets: SheetData[]): Promise<Uint8Array> {
 
   const fmtXml = numFmts.size ? `<numFmts count="${numFmts.size}">${[...numFmts].map(([f, id]) => `<numFmt numFmtId="${id}" formatCode="${esc(f)}"/>`).join('')}</numFmts>` : '';
   const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${fmtXml}` +
-    `<fonts count="2"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font></fonts>` +
-    `<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF003266"/><bgColor indexed="64"/></patternFill></fill></fills>` +
+    `<fonts count="3"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/></font><font><b/><sz val="11"/><color rgb="FF003266"/><name val="Calibri"/><family val="2"/></font></fonts>` +
+    `<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF003266"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3F1F5"/><bgColor indexed="64"/></patternFill></fill></fills>` +
     `<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD0D7E2"/></left><right style="thin"><color rgb="FFD0D7E2"/></right><top style="thin"><color rgb="FFD0D7E2"/></top><bottom style="thin"><color rgb="FFD0D7E2"/></bottom><diagonal/></border></borders>` +
     `<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${xfs.length}">${xfs.join('')}</cellXfs>` +
     `<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;

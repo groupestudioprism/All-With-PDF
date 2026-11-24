@@ -2,10 +2,10 @@ import { PDFArray, PDFDict, PDFDocument, PDFName, StandardFonts, rgb, type PDFFo
 import JSZip from 'jszip';
 import { PDF_MIME, type Tool, type ToolOutput } from '../core/types';
 import { baseName, formatBytes, hexToRgb01, mmToPt, parsePages, readBytes } from '../core/util';
-import { canvasToBlob, makeCanvas, openPdf, pageLines, pageRows, renderPageToCanvas } from '../core/pdfjs';
+import { canvasToBlob, getPdfjs, makeCanvas, openPdf, pageLines, pageRows, renderPageToCanvas } from '../core/pdfjs';
 import { runQpdf } from '../core/qpdf';
 import { loadPdf, subset } from './organize';
-import { blocks, buildTable, detectDecimal, fragments, joinAcrossPages, parseValue, toRows, type Row, type Table } from '../core/tables';
+import { blocks, buildTable, detectDecimal, fragments, joinAcrossPages, pageRules, parseValue, ruledTables, toRows, type Row, type Table } from '../core/tables';
 import { safeSheetName, writeXlsx, type SheetCell, type SheetData } from '../core/xlsx';
 
 const N = (s: string) => PDFName.of(s);
@@ -457,22 +457,39 @@ export const pdfToCsv: Tool = {
     const pageText: { page: number; rows: Row[] }[] = [];
     let anyText = false;
     const outside: [number, string][] = [];
+    const seenOutside = new Set<string>();
     for (let k = 0; k < idx.length; k++) {
       const page = await pdf.getPage(idx[k] + 1);
       const frags = fragments(await page.getTextContent());
       if (frags.length) anyText = true;
-      const rows = toRows(frags);
-      pageText.push({ page: idx[k] + 1, rows });
-      const used = new Set<Row>();
+      const pageNo = idx[k] + 1;
+      const rt = ruledTables(frags, await pageRules(page, (await getPdfjs() as any).OPS), pageNo);
+      const rows = toRows(frags.filter((f) => !rt.used.has(f)));
+      pageText.push({ page: pageNo, rows });
+      const found: Table[] = [...rt.tables];
+      const usedRows = new Set<Row>();
       for (const blk of blocks(rows, o.minCols)) {
-        const t = buildTable(blk, idx[k] + 1, o.minCols);
-        if (t) { tables.push(t); blk.forEach((r) => used.add(r)); }
+        const t = buildTable(blk, pageNo, o.minCols);
+        if (t) { found.push(t); blk.forEach((r) => usedRows.add(r)); }
       }
-      for (const r of rows) if (!used.has(r)) outside.push([idx[k] + 1, r.cells.map((c) => c.text).join('  ')]);
+      found.sort((a, b) => (b.top ?? 0) - (a.top ?? 0));
+      tables.push(...found);
+      for (const r of rows) if (!usedRows.has(r)) {
+        const text = r.cells.map((c) => c.text).join('  ');
+        const key = text.replace(/\d+/g, '#');
+        if (!seenOutside.has(key)) { seenOutside.add(key); outside.push([pageNo, text]); }
+      }
       page.cleanup();
       progress((k + 1) / idx.length, `Page ${idx[k] + 1}`);
     }
     if (!anyText) throw new Error('Ce PDF ne contient pas de texte (document scanné ?). Passez-le d\'abord dans l\'outil « OCR PDF », puis relancez la conversion.');
+    // en-têtes et pieds de page : petits tableaux au même contenu sur de nombreuses pages
+    const keyOf = (t: Table) => t.rows.map((r) => r.join('|').replace(/\d+/g, '#')).join('/');
+    const freq = new Map<string, number>();
+    tables.forEach((t) => freq.set(keyOf(t), (freq.get(keyOf(t)) ?? 0) + 1));
+    const repeated = (t: Table) => t.rows.length <= 3 && idx.length >= 3 && (freq.get(keyOf(t)) ?? 0) >= Math.max(3, idx.length * 0.4);
+    const kept = tables.filter((t) => !repeated(t));
+    if (kept.length) tables = kept;
     if (o.join) tables = joinAcrossPages(tables);
     const dec: ',' | '.' = o.decimal === 'auto' ? detectDecimal(tables.flatMap((t) => t.rows.flat())) : o.decimal;
     const conv = !!o.convert;
@@ -498,11 +515,15 @@ export const pdfToCsv: Tool = {
       list.forEach((t, i) => {
         if (i) rows.push([]);
         const off = rows.length;
-        t.rows.forEach((r, ri) => rows.push(r.map((txt) => ({ v: parseValue(txt, dec, conv && !(t.header && ri === 0)), header: t.header && ri === 0, wrap: txt.includes('\n') }))));
+        t.rows.forEach((r, ri) => {
+          const section = !(t.header && ri === 0) && t.rows[0].length >= 2 && /^([A-Za-z]{1,3}|[IVX]+|\d{1,2})\.?$/.test(r[0]) && r.slice(2).every((v) => !v) && !!r[1] && r[1].length < 90 && !r[1].includes('\n');
+          rows.push(r.map((txt) => ({ v: parseValue(txt, dec, conv && !(t.header && ri === 0)), header: t.header && ri === 0, wrap: txt.includes('\n'), section })));
+        });
         t.merges.forEach((m) => merges.push({ r: m.r + off, c0: m.c0, c1: m.c1 }));
       });
       const single = list.length === 1 && !fallback;
-      return { name, rows, merges, freezeHeader: single && list[0].header, filter: single && list[0].header };
+      const pts = single ? list[0].colPts : undefined;
+      return { name, rows, merges, freezeHeader: single && list[0].header, filter: single && list[0].header, colWidths: pts?.map((w) => Math.min(90, Math.max(8, w / 5))) };
     };
     const used = new Set<string>();
     let sheets: SheetData[];
@@ -514,7 +535,7 @@ export const pdfToCsv: Tool = {
       const perPage = new Map<number, number>();
       sheets = tables.map((t, i) => {
         const n = (perPage.get(t.page) ?? 0) + 1; perPage.set(t.page, n);
-        return toSheet([t], safeSheetName(tables.length === 1 ? 'Tableau' : `Tableau ${i + 1} (p${t.page})`, used));
+        return toSheet([t], safeSheetName(tables.length === 1 ? 'Tableau' : `Tableau ${i + 1} (p${t.page0 ?? t.page}${t.page !== (t.page0 ?? t.page) ? '-' + t.page : ''})`, used));
       });
     }
     if (o.extra && !fallback && outside.length) {
