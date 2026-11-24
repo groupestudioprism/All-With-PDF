@@ -6,7 +6,8 @@ import { canvasToBlob, getPdfjs, makeCanvas, openPdf, pageLines, pageRows, rende
 import { runQpdf } from '../core/qpdf';
 import { loadPdf, subset } from './organize';
 import { blocks, buildTable, detectDecimal, fragments, joinAcrossPages, pageRules, parseValue, ruledTables, toRows, type Row, type Table } from '../core/tables';
-import { safeSheetName, writeXlsx, type SheetCell, type SheetData } from '../core/xlsx';
+import { ptToChars, safeSheetName, writeXlsx, type BorderSpec, type FontSpec, type SheetCell, type SheetData } from '../core/xlsx';
+import { readFontInfos, type FontInfo } from '../core/fonts';
 
 const N = (s: string) => PDFName.of(s);
 const pdfOut = (f: File, suffix: string, data: Uint8Array, note?: string): ToolOutput[] => [{ name: `${baseName(f.name)}_${suffix}.pdf`, data, mime: PDF_MIME, note }];
@@ -445,13 +446,16 @@ export const pdfToCsv: Tool = {
     { key: 'join', label: 'Fusionner les tableaux qui continuent d\'une page à l\'autre', type: 'checkbox', default: true },
     { key: 'convert', label: 'Convertir nombres, dates et pourcentages', type: 'checkbox', default: true },
     { key: 'decimal', label: 'Séparateur décimal du document', type: 'select', default: 'auto', choices: [{ value: 'auto', label: 'Automatique' }, { value: ',', label: 'Virgule (1 234,56)' }, { value: '.', label: 'Point (1,234.56)' }] },
+    { key: 'fidelity', label: 'Reproduire la mise en forme du PDF (polices, tailles, couleurs, fonds, bordures, hauteurs)', type: 'checkbox', default: true },
     { key: 'extra', label: 'Ajouter une feuille « Texte hors tableaux » (titres, notes, totaux)', type: 'checkbox', default: true },
     { key: 'minCols', label: 'Colonnes minimum pour une ligne de tableau', type: 'number', default: 2, min: 2, max: 20 },
     { key: 'pages', label: 'Pages (vide = toutes)', type: 'text', default: '' },
   ],
   async run(files, o, progress) {
     const f = files[0];
-    const pdf = await openPdf(await readBytes(f));
+    const fbytes = await readBytes(f);
+    const pdf = await openPdf(fbytes);
+    const infos = await readFontInfos(fbytes);
     const idx = parsePages(o.pages, pdf.numPages);
     let tables: Table[] = [];
     const pageText: { page: number; rows: Row[] }[] = [];
@@ -463,7 +467,14 @@ export const pdfToCsv: Tool = {
       const frags = fragments(await page.getTextContent());
       if (frags.length) anyText = true;
       const pageNo = idx[k] + 1;
-      const rt = ruledTables(frags, await pageRules(page, (await getPdfjs() as any).OPS), pageNo);
+      const fontOf = (id?: string): FontInfo | undefined => {
+        if (!id) return undefined;
+        let nm: string | undefined;
+        try { nm = page.commonObjs.get(id)?.name; } catch { /* police non résolue */ }
+        if (!nm) return undefined;
+        return infos.get(nm.replace(/^\//, '')) ?? { family: nm.replace(/^[A-Z]{6}\+/, '').replace(/[-,](Bold|Italic|Regular).*$/i, '').replace(/MT$/, ''), bold: /bold/i.test(nm), italic: /italic|oblique/i.test(nm), mono: false, serif: false };
+      };
+      const rt = ruledTables(frags, await pageRules(page, (await getPdfjs() as any).OPS), pageNo, fontOf);
       const rows = toRows(frags.filter((f) => !rt.used.has(f)));
       pageText.push({ page: pageNo, rows });
       const found: Table[] = [...rt.tables];
@@ -509,21 +520,59 @@ export const pdfToCsv: Tool = {
       return [{ name: `${base}.csv`, data: new TextEncoder().encode('\ufeff' + lines.join('\r\n')), mime: 'text/csv', note: `${lines.filter(Boolean).length} ligne(s) extraite(s).` }];
     }
 
+    const NAVY = '#003266';
+    const grid: BorderSpec = { style: 'thin', color: '#D0D7E2' };
     const toSheet = (list: Table[], name: string): SheetData => {
       const rows: SheetCell[][] = [];
       const merges: SheetData['merges'] = [];
+      const heights: (number | undefined)[] = [];
+      const faithful = !!o.fidelity && list.every((t) => !!t.meta);
       list.forEach((t, i) => {
-        if (i) rows.push([]);
-        const off = rows.length;
+        if (i) { rows.push([]); heights.push(undefined); }
+        const rowStart: number[] = [];
         t.rows.forEach((r, ri) => {
-          const section = !(t.header && ri === 0) && t.rows[0].length >= 2 && /^([A-Za-z]{1,3}|[IVX]+|\d{1,2})\.?$/.test(r[0]) && r.slice(2).every((v) => !v) && !!r[1] && r[1].length < 90 && !r[1].includes('\n');
-          rows.push(r.map((txt) => ({ v: parseValue(txt, dec, conv && !(t.header && ri === 0)), header: t.header && ri === 0, wrap: txt.includes('\n'), section })));
+          rowStart[ri] = rows.length;
+          const isHead = t.header && ri === 0;
+          const m = t.meta?.[ri];
+          if (faithful && m) {
+            let maxLines = 1, maxSize = 8;
+            const cells: SheetCell[] = r.map((txt, c) => {
+              const cm = m.cells[c];
+              const full = cm.runs.map((x) => x.t).join('');
+              const first = cm.runs[0];
+              const font: FontSpec | undefined = first ? { font: first.font, size: first.size, b: first.b, i: first.i, color: first.color } : undefined;
+              const val = parseValue(full, dec, conv && !isHead);
+              if (full) { maxLines = Math.max(maxLines, full.split('\n').length); for (const x of cm.runs) maxSize = Math.max(maxSize, x.size); }
+              const mixed = cm.runs.length > 1;
+              return { v: val.t === 's' ? { t: 's', s: full } : val, font, runs: mixed && val.t === 's' ? cm.runs.map((x) => ({ ...x, t: x.t })) : undefined, fill: cm.fill, l: cm.l, r: cm.r, t: cm.t, b: cm.b, ah: val.t === 's' ? cm.ah : cm.ah, av: cm.av, wrap: val.t === 's' };
+            });
+            const need = maxLines * maxSize * 1.25 + 3;
+            const H = Math.max(m.h ?? 0, need);
+            // Excel limite une ligne à 409 pt : une cellule plus haute est répartie sur plusieurs lignes fusionnées verticalement
+            const K = H > 400 ? Math.ceil(H / 400) : 1;
+            for (let k = 0; k < K; k++) {
+              rows.push(k === 0 ? cells.map((c) => (K > 1 ? { ...c, b: undefined } : c)) : cells.map((c) => ({ v: null, fill: c.fill, l: c.l, r: c.r, b: k === K - 1 ? c.b : undefined })));
+              heights.push(H / K);
+            }
+            if (K > 1) for (let c = 0; c < cells.length; c++) merges.push({ r: rowStart[ri], r1: rowStart[ri] + K - 1, c0: c, c1: c });
+          } else {
+            const section = !isHead && t.rows[0].length >= 2 && /^([A-Za-z]{1,3}|[IVX]+|\d{1,2})\.?$/.test(r[0]) && r.slice(2).every((v) => !v) && !!r[1] && r[1].length < 90 && !r[1].includes('\n');
+            rows.push(r.map((txt) => {
+              const val = parseValue(txt, dec, conv && !isHead);
+              const font: FontSpec = isHead ? { font: 'Calibri', size: 11, b: true, i: false, color: '#FFFFFF' } : section ? { font: 'Calibri', size: 11, b: true, i: false, color: NAVY } : { font: 'Calibri', size: 11, b: false, i: false, color: '#000000' };
+              return { v: val, font, fill: isHead ? NAVY : section ? '#E3F1F5' : undefined, l: grid, r: grid, t: grid, b: grid, av: isHead ? 'center' : 'top', ah: isHead ? 'left' : undefined, wrap: txt.includes('\n') || isHead };
+            }));
+            heights.push(undefined);
+          }
         });
-        t.merges.forEach((m) => merges.push({ r: m.r + off, c0: m.c0, c1: m.c1 }));
+        t.merges.forEach((m) => merges.push({ r: rowStart[m.r], c0: m.c0, c1: m.c1 }));
       });
       const single = list.length === 1 && !fallback;
       const pts = single ? list[0].colPts : undefined;
-      return { name, rows, merges, freezeHeader: single && list[0].header, filter: single && list[0].header, colWidths: pts?.map((w) => Math.min(90, Math.max(8, w / 5))) };
+      return {
+        name, rows, merges, rowHeights: heights, freezeHeader: single && list[0].header, filter: single && list[0].header && !faithful,
+        colWidths: pts?.map((w) => ptToChars(w * 1.04)),
+      };
     };
     const used = new Set<string>();
     let sheets: SheetData[];
@@ -539,7 +588,7 @@ export const pdfToCsv: Tool = {
       });
     }
     if (o.extra && !fallback && outside.length) {
-      sheets.push({ name: safeSheetName('Texte hors tableaux', used), rows: [[{ v: { t: 's', s: 'Page' }, header: true }, { v: { t: 's', s: 'Texte' }, header: true }], ...outside.map(([pg, tx]) => [{ v: { t: 'n', v: pg, fmt: '0' } as const }, { v: { t: 's', s: tx } as const }])], merges: [], freezeHeader: true, filter: false });
+      sheets.push({ name: safeSheetName('Texte hors tableaux', used), rows: [[{ v: { t: 's', s: 'Page' }, font: { font: 'Calibri', size: 11, b: true, i: false, color: '#FFFFFF' }, fill: NAVY }, { v: { t: 's', s: 'Texte' }, font: { font: 'Calibri', size: 11, b: true, i: false, color: '#FFFFFF' }, fill: NAVY }], ...outside.map(([pg, tx]) => [{ v: { t: 'n', v: pg, fmt: '0' } as const }, { v: { t: 's', s: tx } as const }])], merges: [], freezeHeader: true, filter: false });
     }
     const data = await writeXlsx(sheets);
     const nrows = tables.reduce((a, t) => a + t.rows.length, 0);

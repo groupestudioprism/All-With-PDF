@@ -25,6 +25,7 @@ export async function openPdf(bytes: Uint8Array, password?: string) {
   return pdfjs.getDocument({
     data: bytes.slice(),
     password,
+    fontExtraProperties: true,
     ...(base ? { standardFontDataUrl: `${base}standard_fonts/`, cMapUrl: `${base}cmaps/`, cMapPacked: true } : {}),
   }).promise;
 }
