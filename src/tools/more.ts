@@ -5,6 +5,8 @@ import { baseName, formatBytes, hexToRgb01, mmToPt, parsePages, readBytes } from
 import { canvasToBlob, makeCanvas, openPdf, pageLines, pageRows, renderPageToCanvas } from '../core/pdfjs';
 import { runQpdf } from '../core/qpdf';
 import { loadPdf, subset } from './organize';
+import { blocks, buildTable, detectDecimal, fragments, joinAcrossPages, parseValue, toRows, type Row, type Table } from '../core/tables';
+import { safeSheetName, writeXlsx, type SheetCell, type SheetData } from '../core/xlsx';
 
 const N = (s: string) => PDFName.of(s);
 const pdfOut = (f: File, suffix: string, data: Uint8Array, note?: string): ToolOutput[] => [{ name: `${baseName(f.name)}_${suffix}.pdf`, data, mime: PDF_MIME, note }];
@@ -435,25 +437,95 @@ export const pdfToPptx: Tool = {
 };
 
 export const pdfToCsv: Tool = {
-  id: 'pdf-to-csv', name: 'PDF vers tableur', icon: 'table', category: 'from-pdf', accept: 'pdf', multiple: false, outputsPdf: false, needsBrowser: true,
-  description: 'Détecte les colonnes d\'après l\'alignement du texte et produit un CSV ouvrable dans Excel.',
+  id: 'pdf-to-csv', name: 'PDF vers Excel', icon: 'table', category: 'from-pdf', accept: 'pdf', multiple: false, outputsPdf: false, needsBrowser: true,
+  description: 'Détecte les tableaux, reconstruit les colonnes et produit un vrai classeur Excel (.xlsx) : nombres, dates et pourcentages typés, cellules fusionnées, en-têtes figés.',
   options: [
-    { key: 'sep', label: 'Séparateur', type: 'select', default: ';', choices: [{ value: ';', label: 'Point-virgule (Excel français)' }, { value: ',', label: 'Virgule' }, { value: '\t', label: 'Tabulation' }] },
-    { key: 'minCols', label: 'Garder les lignes ayant au moins N colonnes', type: 'number', default: 2, min: 1, max: 20 },
+    { key: 'format', label: 'Format de sortie', type: 'select', default: 'xlsx', choices: [{ value: 'xlsx', label: 'Excel (.xlsx)' }, { value: 'csv', label: 'CSV (point-virgule)' }] },
+    { key: 'layout', label: 'Organisation', type: 'select', default: 'tables', choices: [{ value: 'tables', label: 'Une feuille par tableau' }, { value: 'pages', label: 'Une feuille par page' }, { value: 'single', label: 'Tout sur une seule feuille' }] },
+    { key: 'join', label: 'Fusionner les tableaux qui continuent d\'une page à l\'autre', type: 'checkbox', default: true },
+    { key: 'convert', label: 'Convertir nombres, dates et pourcentages', type: 'checkbox', default: true },
+    { key: 'decimal', label: 'Séparateur décimal du document', type: 'select', default: 'auto', choices: [{ value: 'auto', label: 'Automatique' }, { value: ',', label: 'Virgule (1 234,56)' }, { value: '.', label: 'Point (1,234.56)' }] },
+    { key: 'extra', label: 'Ajouter une feuille « Texte hors tableaux » (titres, notes, totaux)', type: 'checkbox', default: true },
+    { key: 'minCols', label: 'Colonnes minimum pour une ligne de tableau', type: 'number', default: 2, min: 2, max: 20 },
     { key: 'pages', label: 'Pages (vide = toutes)', type: 'text', default: '' },
   ],
   async run(files, o, progress) {
     const f = files[0];
     const pdf = await openPdf(await readBytes(f));
     const idx = parsePages(o.pages, pdf.numPages);
-    const q = (s: string) => (/[";,\t\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-    const rows: string[] = [];
+    let tables: Table[] = [];
+    const pageText: { page: number; rows: Row[] }[] = [];
+    let anyText = false;
+    const outside: [number, string][] = [];
     for (let k = 0; k < idx.length; k++) {
-      for (const r of await pageRows(await pdf.getPage(idx[k] + 1))) if (r.cells.length >= o.minCols) rows.push(r.cells.map((c) => q(c.text.trim())).join(o.sep));
-      progress((k + 1) / idx.length);
+      const page = await pdf.getPage(idx[k] + 1);
+      const frags = fragments(await page.getTextContent());
+      if (frags.length) anyText = true;
+      const rows = toRows(frags);
+      pageText.push({ page: idx[k] + 1, rows });
+      const used = new Set<Row>();
+      for (const blk of blocks(rows, o.minCols)) {
+        const t = buildTable(blk, idx[k] + 1, o.minCols);
+        if (t) { tables.push(t); blk.forEach((r) => used.add(r)); }
+      }
+      for (const r of rows) if (!used.has(r)) outside.push([idx[k] + 1, r.cells.map((c) => c.text).join('  ')]);
+      page.cleanup();
+      progress((k + 1) / idx.length, `Page ${idx[k] + 1}`);
     }
-    if (!rows.length) throw new Error('Aucun tableau détecté : essayez de réduire le nombre minimal de colonnes.');
-    return [{ name: `${baseName(f.name)}.csv`, data: new TextEncoder().encode('﻿' + rows.join('\r\n')), mime: 'text/csv', note: `${rows.length} ligne(s) extraite(s).` }];
+    if (!anyText) throw new Error('Ce PDF ne contient pas de texte (document scanné ?). Passez-le d\'abord dans l\'outil « OCR PDF », puis relancez la conversion.');
+    if (o.join) tables = joinAcrossPages(tables);
+    const dec: ',' | '.' = o.decimal === 'auto' ? detectDecimal(tables.flatMap((t) => t.rows.flat())) : o.decimal;
+    const conv = !!o.convert;
+    const base = baseName(f.name);
+
+    // Aucun tableau : on livre tout le texte, une ligne par cellule A.
+    let fallback = false;
+    if (!tables.length) {
+      fallback = true;
+      tables = pageText.filter((p) => p.rows.length).map((p) => ({ page: p.page, rows: p.rows.map((r) => [r.cells.map((c) => c.text).join(' ')]), merges: [], header: false, seps: [], x0: 0 }));
+    }
+
+    if (o.format === 'csv') {
+      const q = (s: string) => (/[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+      const lines: string[] = [];
+      tables.forEach((t, i) => { if (i && o.layout !== 'single') lines.push(''); t.rows.forEach((r) => lines.push(r.map((c) => q(c.replace(/\n/g, ' '))).join(';'))); });
+      return [{ name: `${base}.csv`, data: new TextEncoder().encode('\ufeff' + lines.join('\r\n')), mime: 'text/csv', note: `${lines.filter(Boolean).length} ligne(s) extraite(s).` }];
+    }
+
+    const toSheet = (list: Table[], name: string): SheetData => {
+      const rows: SheetCell[][] = [];
+      const merges: SheetData['merges'] = [];
+      list.forEach((t, i) => {
+        if (i) rows.push([]);
+        const off = rows.length;
+        t.rows.forEach((r, ri) => rows.push(r.map((txt) => ({ v: parseValue(txt, dec, conv && !(t.header && ri === 0)), header: t.header && ri === 0, wrap: txt.includes('\n') }))));
+        t.merges.forEach((m) => merges.push({ r: m.r + off, c0: m.c0, c1: m.c1 }));
+      });
+      const single = list.length === 1 && !fallback;
+      return { name, rows, merges, freezeHeader: single && list[0].header, filter: single && list[0].header };
+    };
+    const used = new Set<string>();
+    let sheets: SheetData[];
+    if (o.layout === 'single') sheets = [toSheet(tables, safeSheetName(base, used))];
+    else if (o.layout === 'pages') {
+      const pages = [...new Set(tables.map((t) => t.page))];
+      sheets = pages.map((p) => toSheet(tables.filter((t) => t.page === p), safeSheetName(`Page ${p}`, used)));
+    } else {
+      const perPage = new Map<number, number>();
+      sheets = tables.map((t, i) => {
+        const n = (perPage.get(t.page) ?? 0) + 1; perPage.set(t.page, n);
+        return toSheet([t], safeSheetName(tables.length === 1 ? 'Tableau' : `Tableau ${i + 1} (p${t.page})`, used));
+      });
+    }
+    if (o.extra && !fallback && outside.length) {
+      sheets.push({ name: safeSheetName('Texte hors tableaux', used), rows: [[{ v: { t: 's', s: 'Page' }, header: true }, { v: { t: 's', s: 'Texte' }, header: true }], ...outside.map(([pg, tx]) => [{ v: { t: 'n', v: pg, fmt: '0' } as const }, { v: { t: 's', s: tx } as const }])], merges: [], freezeHeader: true, filter: false });
+    }
+    const data = await writeXlsx(sheets);
+    const nrows = tables.reduce((a, t) => a + t.rows.length, 0);
+    return [{
+      name: `${base}.xlsx`, data, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      note: fallback ? 'Aucun tableau détecté : le texte a été placé ligne par ligne. Essayez « Colonnes minimum » = 2 ou un autre découpage.' : `${tables.length} tableau(x), ${nrows} ligne(s), ${sheets.length} feuille(s).`,
+    }];
   },
 };
 

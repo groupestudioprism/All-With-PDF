@@ -11,7 +11,7 @@ React + TypeScript + Vite · [pdf-lib](https://pdf-lib.js.org/) · [pdf.js](http
 | Organiser | Fusionner, Diviser (plages, tous les N, par page, **par taille**), Supprimer / Extraire des pages, **Organiser** par vignettes (multi-PDF), **Réordonner en lot** (inverser, paires/impaires, répéter, pages vierges), Pages par feuille, **Brochure** (imposition recto verso), Scanner vers PDF |
 | Optimiser | Compresser (images JPEG recompressées en gardant le texte, ou rasterisation), **Noir et blanc**, Réparer (fichiers tronqués), OCR multilingue |
 | Vers PDF | Image vers PDF, **Word vers PDF**, **Texte / Markdown vers PDF** |
-| Depuis PDF | PDF vers image (jusqu'à 600 dpi), PDF vers texte, **PDF vers Word (.docx)**, **PDF vers PowerPoint (.pptx)**, **PDF vers tableur (CSV)** |
+| Depuis PDF | PDF vers image (jusqu'à 600 dpi), PDF vers texte, **PDF vers Word (.docx)**, **PDF vers PowerPoint (.pptx)**, **PDF vers Excel (.xlsx : détection des tableaux, nombres et dates typés, tableaux continués sur plusieurs pages fusionnés, CSV en option)** |
 | Modifier | **Éditeur visuel** (texte, formes, surlignage, dessin, images, **signature**, blanc de correction, caviardage définitif), **Remplir un formulaire**, Pivoter, Numéroter, **En-tête et pied de page**, Filigrane, Rogner (manuel ou auto), **Changer le format**, Aplatir les formulaires |
 | Sécurité | **Protéger par mot de passe (AES 256)**, **Déverrouiller**, **Caviarder** par recherche (mots, regex, e-mails, téléphones, IBAN, cartes), **Nettoyer** (annotations, JavaScript, pièces jointes), Métadonnées |
 | Analyse | PDF vers Markdown, **Comparer** deux PDF, **Rechercher dans le PDF**, **Informations du PDF** |

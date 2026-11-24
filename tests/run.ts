@@ -152,13 +152,38 @@ await test('PDF vers Word / tableur, infos, recherche', async () => {
   const z = await JSZip.loadAsync(w.data as Uint8Array);
   const body = await z.file('word/document.xml')!.async('string');
   assert.match(body, /A page 1/); assert.match(body, /w:br w:type="page"/);
-  const [csv] = await run('pdf-to-csv', [A], { minCols: 1 });
+  const [csv] = await run('pdf-to-csv', [A], { format: 'csv' });
   assert.match(new TextDecoder().decode(csv.data as Uint8Array), /A page 1/);
   const [inf] = await run('info', [A]);
   assert.match(new TextDecoder().decode(inf.data as Uint8Array), /A4|141 x 212|mm/);
   const [s] = await run('search', [A], { term: 'dupont' });
   assert.match(s.note!, /5 occurrence/);
   await assert.rejects(run('search', [A], { term: '' }));
+});
+
+await test('PDF vers Excel : tableaux, types, pages jointes', async () => {
+  const doc = await PDFDocument.create();
+  const f = await doc.embedFont(StandardFonts.Helvetica);
+  const right = (p: any, t: string, xr: number, y: number) => p.drawText(t, { x: xr - f.widthOfTextAtSize(t, 10), y, size: 10, font: f });
+  const data = [['01/02/2026', 'Loyer', '1 250,00', '12 %'], ['15/02/2026', 'Eau', '(45,5)', ''], ['28/02/2026', 'Code 0042', '1 000 000', '5,5 %']];
+  for (let pg = 0; pg < 2; pg++) {
+    const p = doc.addPage([500, 400]);
+    p.drawText('Date', { x: 40, y: 340, size: 10, font: f }); p.drawText('Libelle', { x: 130, y: 340, size: 10, font: f }); right(p, 'Montant', 330, 340); right(p, 'Taux', 420, 340);
+    data.forEach((r, i) => { const y = 320 - i * 16; p.drawText(r[0], { x: 40, y, size: 10, font: f }); p.drawText(r[1], { x: 130, y, size: 10, font: f }); right(p, r[2], 330, y); if (r[3]) right(p, r[3], 420, y); });
+  }
+  const file = new File([await doc.save() as BlobPart], 't.pdf', { type: 'application/pdf' });
+  const [x] = await run('pdf-to-csv', [file]);
+  assert.match(x.name, /\.xlsx$/); assert.match(x.note!, /1 tableau/);
+  const JSZip = (await import('jszip')).default;
+  const z = await JSZip.loadAsync(x.data as Uint8Array);
+  const sh = await z.file('xl/worksheets/sheet1.xml')!.async('string');
+  assert.match(sh, /<v>1250<\/v>/); assert.match(sh, /<v>-45\.5<\/v>/); assert.match(sh, /<v>1000000<\/v>/); assert.match(sh, /<v>0\.12<\/v>/);
+  assert.match(sh, /Code 0042/); assert.match(sh, /autoFilter/); assert.match(sh, /state="frozen"/);
+  assert.equal((sh.match(/<row /g) || []).length, 7); // en-tête + 3 lignes x 2 pages, en-tête répété supprimé
+  const [sep] = await run('pdf-to-csv', [file], { join: false });
+  assert.match(sep.note!, /2 tableau/);
+  const empty = await PDFDocument.create(); empty.addPage();
+  await assert.rejects(run('pdf-to-csv', [new File([await empty.save() as BlobPart], 'v.pdf')]), /texte/);
 });
 
 console.log(failed ? `\n${failed} test(s) en échec` : '\nTous les tests passent');
