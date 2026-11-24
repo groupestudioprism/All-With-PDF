@@ -1,0 +1,1 @@
+var e=new URL(`qpdf-B7vamGNu.wasm`,import.meta.url).href;export{e as default};

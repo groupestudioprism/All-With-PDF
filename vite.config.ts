@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// base './' : fonctionne tel quel sur GitHub Pages (sous-chemin /all-with-pdf/)
+// Le site compilé est écrit dans docs/ (publié par GitHub Pages en mode « Deploy from a branch »).
+// base './' : fonctionne à la racine comme sous un sous-chemin.
 export default defineConfig({
   base: './',
   plugins: [react()],
-  build: { chunkSizeWarningLimit: 2500 },
+  build: { outDir: 'docs', emptyOutDir: true, chunkSizeWarningLimit: 2500, rollupOptions: { input: 'app.html' } },
 });

@@ -40,3 +40,7 @@ Ajouter un outil = créer un objet `Tool` dans `src/tools/` et l'ajouter à `src
 ## Déploiement
 
 Le workflow `.github/workflows/deploy.yml` publie sur GitHub Pages à chaque push sur `main` (Réglages → Pages → Source : *GitHub Actions*).
+
+## Publication
+
+Le site compilé est dans `docs/` et GitHub Pages le publie en mode « Deploy from a branch » (branche `main`, dossier `/` ou `/docs`, les deux fonctionnent). Après toute modification : `npm run build`, puis committer `docs/`.
